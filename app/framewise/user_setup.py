@@ -3,7 +3,7 @@
 A package installs Framewise for the whole computer, but keyboard shortcuts
 and GNOME extensions are switched on per person. This runs when Framewise
 starts and does that the first time (and again if the program moved, so the
-shortcuts point at it).
+shortcuts and "Launch at login" point at it).
 """
 
 from gi.repository import Gio, GLib
@@ -25,10 +25,18 @@ def ensure():
         shortcuts.setup()
         shortcuts.refresh_print_key()
         _enable_extension()
+        _refresh_autostart()
     except GLib.Error:
         return False
     state.set("user_setup", {"version": SETUP_VERSION, "launcher": launcher})
     return True
+
+
+def _refresh_autostart():
+    """"Launch at login" points at the program: keep it pointing at this one."""
+    from .settings_window import autostart_enabled, set_autostart
+    if autostart_enabled():
+        set_autostart(True)
 
 
 def _enable_extension():
