@@ -3,7 +3,7 @@ Version: @VERSION@
 Architecture: all
 Section: video
 Priority: optional
-Maintainer: gitcotech <104742780+LnPaulin@users.noreply.github.com>
+Maintainer: gitcotech <gitcotech2@gmail.com>
 Homepage: https://t.me/gitcotech
 Installed-Size: @SIZE@
 Depends: python3 (>= 3.12), python3-gi, python3-gi-cairo, python3-cairo, python3-numpy,

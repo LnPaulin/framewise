@@ -2,6 +2,7 @@
 <component type="desktop-application">
   <id>com.gitcotech.Framewise</id>
   <metadata_license>CC0-1.0</metadata_license>
+  <update_contact>gitcotech2@gmail.com</update_contact>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Framewise</name>
   <summary>Screen recorder, screenshots, text from the screen and clipboard history</summary>
