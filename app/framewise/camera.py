@@ -18,7 +18,7 @@ gi.require_version("GstVideo", "1.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, GObject, Gst, GstVideo  # noqa: E402
 
-from . import gpu  # noqa: E402
+from . import gpu, webcam_controls  # noqa: E402
 
 Gst.init(None)
 
@@ -57,6 +57,10 @@ OLD_LOOKS = {"bright": "teams", "soft": "touchup"}
 # With effects on, frames are processed at this size (the bubble is smaller,
 # and it keeps the effects quick).
 FX_WIDTH, FX_HEIGHT = 960, 540
+
+# Lock focus: autofocus runs this long after the camera opens (to find your
+# face), then the camera holds that focus.
+FOCUS_SETTLE_MS = 2500
 
 
 class FrameStream(GObject.Object, Gdk.Paintable):
@@ -128,6 +132,9 @@ class Camera:
         self._pending_lock = threading.Lock()
         self._show_scheduled = False
         self.on_paintable = None      # called with the new paintable when it changes
+        self._focus_lock = False
+        self._focus_timer = None
+        self._autofocus_before = None  # the camera's own autofocus setting, put back on stop
 
     # Tests set this to a GStreamer source (e.g. a still picture) so they never
     # turn on the real webcam. It must end with "! ".
@@ -189,11 +196,19 @@ class Camera:
         self._apply()
         self.pipeline.set_state(Gst.State.PLAYING)
         self._meter_timer = GLib.timeout_add(250, self._meter)
+        if self._focus_lock and self.has_autofocus():
+            if self._autofocus_before is None:
+                self._lock_after_settling()
+            else:
+                self._set_autofocus(False)  # restarted for effects: keep the held focus
 
     def stop(self, keep_effects=False):
         if self._meter_timer:
             GLib.source_remove(self._meter_timer)
             self._meter_timer = None
+        self._cancel_focus_timer()
+        if not keep_effects:
+            self._restore_autofocus()
         if self.pipeline:
             self.pipeline.get_bus().remove_signal_watch()
             self.pipeline.set_state(Gst.State.NULL)
@@ -270,6 +285,51 @@ class Camera:
         err, _dbg = msg.parse_error()
         if self.on_error:
             self.on_error(err.message)
+
+    # ---- focus -------------------------------------------------------------
+
+    def has_autofocus(self):
+        """The camera can autofocus (so focus can be locked)."""
+        return not self.test_source and webcam_controls.has(self.device, webcam_controls.FOCUS_AUTO)
+
+    def set_focus_lock(self, locked):
+        """Locked: the camera stops refocusing and holds its focus. When the
+        camera opens, autofocus first gets a moment to find you."""
+        self._focus_lock = bool(locked)
+        if not self.pipeline or not self.has_autofocus():
+            return
+        self._cancel_focus_timer()
+        if self._focus_lock:
+            self._set_autofocus(False)   # hold the focus it has now
+        else:
+            self._set_autofocus(True)
+
+    def _lock_after_settling(self):
+        self._set_autofocus(True)
+
+        def lock():
+            self._focus_timer = None
+            if self._focus_lock and self.pipeline:
+                self._set_autofocus(False)
+            return False
+        self._focus_timer = GLib.timeout_add(FOCUS_SETTLE_MS, lock)
+
+    def _cancel_focus_timer(self):
+        if self._focus_timer:
+            GLib.source_remove(self._focus_timer)
+            self._focus_timer = None
+
+    def _set_autofocus(self, on):
+        if self._autofocus_before is None:
+            self._autofocus_before = webcam_controls.get_value(self.device, webcam_controls.FOCUS_AUTO)
+        webcam_controls.set_value(self.device, webcam_controls.FOCUS_AUTO, 1 if on else 0)
+
+    def _restore_autofocus(self):
+        """Gives the camera back its own setting, so other apps aren't left
+        with a locked focus."""
+        if self._autofocus_before is not None:
+            webcam_controls.set_value(self.device, webcam_controls.FOCUS_AUTO, self._autofocus_before)
+            self._autofocus_before = None
 
     # ---- settings ----------------------------------------------------------
 

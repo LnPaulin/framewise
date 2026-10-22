@@ -2,7 +2,7 @@
 
 A small borderless window showing the webcam in a circle, a rounded
 rectangle or a square. Drag it anywhere, resize it from GNOME's window menu
-(right-click or Alt+F8), and hover to reach its controls (shape, look, adjustments, mirror, close). It is
+(right-click or Alt+F8), and hover to reach its controls (shape, look, adjustments, focus lock, mirror, close). It is
 an ordinary window on screen, so screen and area recordings capture it
 wherever it is, including when it is moved or resized mid-recording.
 """
@@ -59,6 +59,7 @@ DEFAULTS = {
     "camera_blur": 0.0,           # effects, 0..1 (camera_fx)
     "camera_smooth": 0.0,
     "camera_light": 0.0,
+    "camera_focus_lock": False,   # cameras with autofocus only
 }
 
 
@@ -131,6 +132,7 @@ class CameraBubble(Gtk.Window):
         self.camera.set_effects(blur=_get("camera_blur"), smooth=_get("camera_smooth"),
                                 light=_get("camera_light"))
         self.camera.on_paintable = self._on_new_paintable
+        self.camera.set_focus_lock(_get("camera_focus_lock"))
         try:
             self.camera.start()
         except GLib.Error as e:
@@ -305,6 +307,8 @@ class CameraBubble(Gtk.Window):
         body.append(self.preset_hint)
 
         body.append(self._effects_section())
+        if self.camera.has_autofocus():
+            body.append(self._focus_section())
         body.append(Gtk.Label(label="Adjustments", xalign=0, css_classes=["heading"], margin_top=4))
 
         self.sliders = {}
@@ -359,6 +363,25 @@ class CameraBubble(Gtk.Window):
         box.append(Gtk.Label(label="Effects are included in recordings.",
                              xalign=0, wrap=True, max_width_chars=36, css_classes=["dim-label", "caption"]))
         return box
+
+    def _focus_section(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin_top=4)
+        row = Gtk.Box(spacing=12)
+        row.append(Gtk.Label(label="Lock focus", xalign=0, hexpand=True, css_classes=["heading"]))
+        switch = Gtk.Switch(active=bool(_get("camera_focus_lock")), valign=Gtk.Align.CENTER)
+        switch.update_property([Gtk.AccessibleProperty.LABEL], ["Lock focus"])
+        switch.connect("notify::active", self._on_focus_lock)
+        row.append(switch)
+        box.append(row)
+        box.append(Gtk.Label(label="Focuses on you, then holds it, so the camera "
+                                   "doesn't refocus while you record.",
+                             xalign=0, wrap=True, max_width_chars=36,
+                             css_classes=["dim-label", "caption"]))
+        return box
+
+    def _on_focus_lock(self, switch, _pspec):
+        settings.set("camera_focus_lock", switch.get_active())
+        self.camera.set_focus_lock(switch.get_active())
 
     def _slider(self, title, lo, hi, step, key, apply, scale_factor=1):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
