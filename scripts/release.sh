@@ -5,10 +5,11 @@
 #
 #   1. sets the version (app/framewise/__init__.py, README), runs the tests
 #   2. builds dist/framewise_<version>_all.deb
-#   3. commits "Framewise <version>", tags v<version>, pushes main and the tag
-#   4. creates the GitHub release with the .deb and the notes
-#   5. updates the APT repository on GitHub Pages (gh-pages branch), signed
-#      with the Framewise key: gpg asks for its password
+#   3. builds the APT repository with it, signed with the Framewise key (gpg
+#      asks for its password; nothing has been published yet if that fails)
+#   4. commits "Framewise <version>", tags v<version>, pushes main and the tag
+#   5. creates the GitHub release with the .deb and the notes
+#   6. publishes the APT repository on GitHub Pages (gh-pages branch)
 #
 # Installed copies then get the update through Software Updater.
 set -euo pipefail
@@ -35,13 +36,6 @@ sed -i -E "s/framewise_[0-9.]+_all\.deb/framewise_${VERSION}_all.deb/g" README.m
 scripts/build-deb.sh
 DEB="dist/framewise_${VERSION}_all.deb"
 
-# ---- git and GitHub release --------------------------------------------------------
-git add app/framewise/__init__.py README.md
-git commit -q -m "Framewise $VERSION"
-git tag -a "v$VERSION" -m "Framewise $VERSION"
-git push -q origin main "v$VERSION"
-gh release create "v$VERSION" "$DEB" --title "Framewise $VERSION" --notes-file "$NOTES"
-
 # ---- APT repository (GitHub Pages) ------------------------------------------------------
 # The site is one commit, replaced each time (the .deb files would otherwise
 # pile up in its history); the last few versions are kept.
@@ -53,10 +47,23 @@ if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
     git archive FETCH_HEAD apt | tar -x -C "$SITE"
 fi
 cp "$DEB" "$SITE/apt/"
-python3 scripts/apt_repo.py "$SITE/apt" "$KEY" --keep 3
+if ! python3 scripts/apt_repo.py "$SITE/apt" "$KEY" --keep 3; then
+    git checkout -- app/framewise/__init__.py README.md
+    echo "Signing failed (password box closed?). Nothing was published; run this again."
+    exit 1
+fi
 cp packaging/apt/framewise-archive-keyring.asc "$SITE/apt/framewise-archive-keyring.asc"
 cp packaging/site/index.html "$SITE/index.html"
 touch "$SITE/.nojekyll"
+
+# ---- git and GitHub release --------------------------------------------------------
+git add app/framewise/__init__.py README.md
+git commit -q -m "Framewise $VERSION"
+git tag -a "v$VERSION" -m "Framewise $VERSION"
+git push -q origin main "v$VERSION"
+gh release create "v$VERSION" "$DEB" --title "Framewise $VERSION" --notes-file "$NOTES"
+
+# ---- publish the APT repository -------------------------------------------------------
 (
     cd "$SITE"
     git init -q -b gh-pages
