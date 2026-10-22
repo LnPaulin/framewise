@@ -27,10 +27,13 @@
   <p>Screen recording, screenshots, text capture and clipboard history for Ubuntu (GNOME).</p>
   <section>
     <h2>Install</h2>
-    <p>Download the latest <code>.deb</code> from
-      <a href="https://github.com/LnPaulin/framewise/releases/latest">GitHub Releases</a>, then:</p>
-    <pre>sudo apt install ./framewise_*_all.deb</pre>
-    <p>That also sets up updates: new versions appear in Software Updater.</p>
+    <p>In a terminal:</p>
+    <pre>wget -qO- https://lnpaulin.github.io/framewise/install.sh | sudo bash</pre>
+    <p>It adds the Framewise update repository and installs Framewise with apt
+      (<a href="install.sh">read the script</a>). New versions then appear in Software Updater.</p>
+    <p>Or download the <code>.deb</code> from
+      <a href="https://github.com/LnPaulin/framewise/releases/latest">GitHub Releases</a> and run
+      <code>sudo apt install ./framewise_*_all.deb</code>; it sets up updates too.</p>
   </section>
   <section>
     <h2>Update repository</h2>

@@ -24,18 +24,45 @@ asks GitHub whether a new version is out; Settings → About turns that off.)
 ## Install
 
 Needs Ubuntu 24.04 or newer with GNOME (made and tested on Ubuntu 26.04,
-GNOME 50).
+GNOME 50). In a terminal:
+
+```bash
+wget -qO- https://lnpaulin.github.io/framewise/install.sh | sudo bash
+```
+
+It adds the Framewise update repository and installs Framewise with apt,
+which also brings what it needs (GStreamer, ffmpeg, Tesseract and so on).
+[Read the script](packaging/site/install.sh) first if you like. Then:
+
+1. Open **Framewise** from the app grid.
+2. **Log out and back in once.** This turns on its GNOME extension: the menu
+   at the top right, clipboard history and the recording controls.
+
+<details>
+<summary>The same, step by step</summary>
+
+```bash
+sudo wget -qO /etc/apt/keyrings/framewise.gpg https://lnpaulin.github.io/framewise/apt/framewise.gpg
+sudo wget -qO /etc/apt/sources.list.d/framewise.sources https://lnpaulin.github.io/framewise/apt/framewise.sources
+sudo apt update && sudo apt install framewise
+```
+
+Key fingerprint: `F69B 9995 8DF3 DE44 9A33 CABF 2B8D 94D1 92EA DC4F`.
+</details>
+
+<details>
+<summary>Or with the .deb file</summary>
+
+Download `framewise_1.0.2_all.deb` from
+[Releases](https://github.com/LnPaulin/framewise/releases/latest), then:
 
 ```bash
 sudo apt install ./framewise_1.0.2_all.deb
 ```
 
-Use `apt`, not `dpkg -i`: apt also installs what Framewise needs (GStreamer,
-ffmpeg, Tesseract and so on). Then:
-
-1. Open **Framewise** from the app grid.
-2. **Log out and back in once.** This turns on its GNOME extension: the menu
-   at the top right, clipboard history and the recording controls.
+Use `apt`, not `dpkg -i`, so what Framewise needs is installed too. This also
+sets up updates.
+</details>
 
 **Updates** arrive in Ubuntu's Software Updater, like system updates: the
 package adds the Framewise update repository (signed; see

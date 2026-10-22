@@ -53,7 +53,10 @@ if ! python3 scripts/apt_repo.py "$SITE/apt" "$KEY" --keep 3; then
     exit 1
 fi
 cp packaging/apt/framewise-archive-keyring.asc "$SITE/apt/framewise-archive-keyring.asc"
-cp packaging/site/index.html "$SITE/index.html"
+# For the one-line install: the same key and source files the .deb installs.
+cp packaging/apt/framewise-archive-keyring.gpg "$SITE/apt/framewise.gpg"
+cp packaging/deb/framewise.sources "$SITE/apt/framewise.sources"
+cp packaging/site/index.html packaging/site/install.sh "$SITE/"
 touch "$SITE/.nojekyll"
 
 # ---- git and GitHub release --------------------------------------------------------
