@@ -396,6 +396,15 @@ class Framewise(Adw.Application):
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", lambda *_a, cb=cb, n=name: (n == "quit-app" or self.stay_running(), cb()))
             self.add_action(action)
+        # Update notifications' buttons. "What's New" opens a release page,
+        # only for a valid version number (anyone on the session bus can call actions).
+        whats_new = Gio.SimpleAction.new("whats-new", GLib.VariantType.new("s"))
+        whats_new.connect("activate", lambda _a, v: self._open_release(v.get_string()))
+        self.add_action(whats_new)
+        updater = Gio.SimpleAction.new("open-updater", None)
+        updater.connect("activate", lambda *_: self._open_updater())
+        self.add_action(updater)
+        self.updates = None
         for name, cb in (("shot-edit", self.edit_shot), ("shot-pin", self.pin_shot)):
             action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             action.connect("activate", lambda _a, param, cb=cb: cb(param.get_string()))
@@ -409,6 +418,20 @@ class Framewise(Adw.Application):
         # First run for this person: shortcuts and the GNOME extension.
         from . import user_setup
         user_setup.ensure()
+        from .updates import Updates
+        self.updates = Updates(self)
+        try:
+            self.updates.start()
+        except Exception as e:  # noqa: BLE001 - updates must never stop the app from starting
+            print(f"Framewise: update helper failed: {e}", file=sys.stderr)
+
+    def _open_updater(self):
+        from .updates import open_updater
+        open_updater()
+
+    def _open_release(self, version):
+        from .updates import release_page
+        Gio.AppInfo.launch_default_for_uri(release_page(version), None)
 
     def do_shutdown(self):
         from . import devices

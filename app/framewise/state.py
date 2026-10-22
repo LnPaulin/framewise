@@ -57,6 +57,11 @@ DEFAULT_SETTINGS = {
     "shot_loupe": True,           # magnifier while choosing
     # Always there
     "topbar_icon": True,          # the Framewise menu at the top right (read by the extension)
+    # Updates (updates.py)
+    "check_updates": True,        # ask GitHub about once a day for a newer version
+    "last_update_check": 0,       # time.time() of the last check
+    "update_notified": "",        # the newer version already announced
+    "last_run_version": "",       # to say "updated to X" once after an update
     # Clipboard history (kept by the GNOME Shell extension, which reads these)
     "clipboard_history": True,
     "clipboard_limit": 100,       # unpinned entries kept; 0 = no limit

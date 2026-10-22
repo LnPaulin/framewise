@@ -6,6 +6,8 @@
 #   /usr/lib/framewise/framewise/               the app (Python), with its small models
 #   /usr/share/gnome-shell/extensions/framewise@gitcotech/
 #   /usr/share/applications, dbus-1/services, icons, metainfo, doc
+#   /etc/apt/sources.list.d/framewise.sources   the update channel (GitHub Pages)
+#   /etc/apt/keyrings/framewise.gpg             the key its updates are signed with
 #
 # Install the result with:  sudo apt install ./dist/framewise_<version>_all.deb
 # (apt, not dpkg -i, so the packages it needs are installed too).
@@ -51,8 +53,16 @@ find "$PKG/usr" -type d -exec chmod 755 {} +
 find "$PKG/usr" -type f -exec chmod 644 {} +
 chmod 755 "$PKG/usr/bin/framewise"
 
+# Updates: the Framewise APT repository and its key. Both are conffiles, so
+# "apt remove" keeps them (harmless) and "apt purge" removes them.
+install -d -m 755 "$PKG/etc" "$PKG/etc/apt" "$PKG/etc/apt/sources.list.d" "$PKG/etc/apt/keyrings"
+install -m 644 "$ROOT/packaging/deb/framewise.sources" "$PKG/etc/apt/sources.list.d/framewise.sources"
+install -m 644 "$ROOT/packaging/apt/framewise-archive-keyring.gpg" "$PKG/etc/apt/keyrings/framewise.gpg"
+printf '%s\n' /etc/apt/sources.list.d/framewise.sources /etc/apt/keyrings/framewise.gpg > "$PKG/DEBIAN/conffiles"
+chmod 644 "$PKG/DEBIAN/conffiles"
+
 # ---- control ---------------------------------------------------------------------------
-SIZE="$(du -sk "$PKG/usr" | cut -f1)"
+SIZE="$(du -sk "$PKG/usr" "$PKG/etc" | awk '{s+=$1} END {print s}')"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@SIZE@/$SIZE/" "$ROOT/packaging/deb/control" > "$PKG/DEBIAN/control"
 
 mkdir -p "$OUT"

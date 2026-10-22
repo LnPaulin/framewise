@@ -18,7 +18,8 @@ Ubuntu (GNOME). Brought to you by [@gitcotech](https://t.me/gitcotech).
 - **Camera** bubble or mirror, with filters, background blur, skin smoothing
   and face lighting.
 
-Everything runs on your computer. Nothing is uploaded.
+Everything runs on your computer. Nothing is uploaded. (Once a day Framewise
+asks GitHub whether a new version is out; Settings → About turns that off.)
 
 ## Install
 
@@ -36,7 +37,14 @@ ffmpeg, Tesseract and so on). Then:
 2. **Log out and back in once.** This turns on its GNOME extension: the menu
    at the top right, clipboard history and the recording controls.
 
-To remove it: `sudo apt remove framewise`.
+**Updates** arrive in Ubuntu's Software Updater, like system updates: the
+package adds the Framewise update repository (signed; see
+[lnpaulin.github.io/framewise](https://lnpaulin.github.io/framewise/)).
+Framewise restarts itself quietly after an update. If the update includes a
+new GNOME extension, it tells you to log out and back in.
+
+To remove it: `sudo apt remove framewise` (`sudo apt purge framewise` also
+removes the update repository).
 
 ## Use
 

@@ -214,6 +214,8 @@ class SettingsWindow(Adw.PreferencesWindow):
         ready.add(login)
         page.add(ready)
 
+        page.add(self._updates_group())
+
         from .home import SUPPORT_URL
         support = Adw.PreferencesGroup(
             title="Support Framewise",
@@ -260,6 +262,39 @@ class SettingsWindow(Adw.PreferencesWindow):
             group.add(row)
         page.add(group)
         return page
+
+    def _updates_group(self):
+        from .updates import APT_SOURCE
+        group = Adw.PreferencesGroup(
+            title="Updates",
+            description=("New versions arrive in Software Updater." if APT_SOURCE.exists()
+                         else "Download new versions from GitHub."))
+        group.add(_switch("Check for updates", "Once a day, ask GitHub whether a new version is out",
+                          "check_updates"))
+        row = Adw.ActionRow(title="Check now")
+        button = Gtk.Button(label="Check", valign=Gtk.Align.CENTER)
+
+        def done(latest, error):
+            from . import __version__
+            from .updates import parse
+            button.set_sensitive(True)
+            if error:
+                row.set_subtitle("Couldn't reach GitHub. Check your connection.")
+            elif parse(latest) > parse(__version__):
+                row.set_subtitle(f"Framewise {latest} is available")
+            else:
+                row.set_subtitle("Framewise is up to date")
+
+        def check(_b):
+            if self.app.updates is None:
+                return
+            button.set_sensitive(False)
+            row.set_subtitle("Checking…")
+            self.app.updates.check(done)
+        button.connect("clicked", check)
+        row.add_suffix(button)
+        group.add(row)
+        return group
 
     # ---- pieces ----------------------------------------------------------------------------
 

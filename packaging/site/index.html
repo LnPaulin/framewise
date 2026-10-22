@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Framewise</title>
+<style>
+  :root { --bg: #fafafa; --fg: #1d1d1f; --dim: #5f5f66; --card: #fff; --line: #e3e3e8; --accent: #3584e4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1e1e20; --fg: #f2f2f4; --dim: #a0a0a8; --card: #2a2a2d; --line: #3a3a3e; --accent: #78aeed; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Cantarell, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  p { color: var(--dim); }
+  a { color: var(--accent); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 4px 20px; margin: 20px 0; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+        overflow-x: auto; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Framewise</h1>
+  <p>Screen recording, screenshots, text capture and clipboard history for Ubuntu (GNOME).</p>
+  <section>
+    <h2>Install</h2>
+    <p>Download the latest <code>.deb</code> from
+      <a href="https://github.com/LnPaulin/framewise/releases/latest">GitHub Releases</a>, then:</p>
+    <pre>sudo apt install ./framewise_*_all.deb</pre>
+    <p>That also sets up updates: new versions appear in Software Updater.</p>
+  </section>
+  <section>
+    <h2>Update repository</h2>
+    <p>This site hosts the Framewise APT repository at <code>/apt/</code>, signed with the
+      <a href="apt/framewise-archive-keyring.asc">Framewise archive key</a>
+      (fingerprint <code>F69B 9995 8DF3 DE44 9A33 CABF 2B8D 94D1 92EA DC4F</code>).
+      Installing the .deb configures it for you.</p>
+  </section>
+  <p><a href="https://github.com/LnPaulin/framewise">Source code</a> · GPL-3.0-or-later</p>
+</main>
+</body>
+</html>
