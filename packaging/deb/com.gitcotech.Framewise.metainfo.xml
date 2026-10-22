@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.gitcotech.Framewise</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Framewise</name>
+  <summary>Screen recorder, screenshots, text from the screen and clipboard history</summary>
+  <developer id="me.t.gitcotech">
+    <name>gitcotech</name>
+  </developer>
+  <description>
+    <p>Record an area, a window or the whole screen with sound and a camera bubble,
+    then edit: cut silences and filler words, remove background noise, zoom on clicks,
+    add a background, and save as MP4 or GIF.</p>
+    <p>Take screenshots and mark them up, copy text from any part of the screen,
+    find anything you copied earlier, and use your camera as a mirror with background blur.
+    Everything runs on your computer.</p>
+  </description>
+  <launchable type="desktop-id">com.gitcotech.Framewise.desktop</launchable>
+  <url type="homepage">https://t.me/gitcotech</url>
+  <url type="donation">https://buymeacoffee.com/framewise</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

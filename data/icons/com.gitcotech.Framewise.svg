@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3d7cf2"/>
+      <stop offset="1" stop-color="#6a3fe0"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2a9c"/>
+      <stop offset="1" stop-color="#2a1f78"/>
+    </linearGradient>
+    <radialGradient id="dot" cx="0.38" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ff8a7a"/>
+      <stop offset="0.6" stop-color="#f2414b"/>
+      <stop offset="1" stop-color="#c8202f"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- base, with a darker edge underneath like GNOME app icons -->
+  <rect x="12" y="16" width="104" height="104" rx="26" fill="url(#side)"/>
+  <rect x="12" y="10" width="104" height="104" rx="26" fill="url(#bg)"/>
+  <rect x="12" y="10" width="104" height="52" rx="26" fill="url(#shine)"/>
+  <!-- viewfinder corners -->
+  <g fill="none" stroke="#ffffff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 46 V38 a8 8 0 0 1 8 -8 H48"/>
+    <path d="M80 30 H88 a8 8 0 0 1 8 8 V46"/>
+    <path d="M96 78 V86 a8 8 0 0 1 -8 8 H80"/>
+    <path d="M48 94 H40 a8 8 0 0 1 -8 -8 V78"/>
+  </g>
+  <!-- record dot -->
+  <circle cx="64" cy="62" r="17" fill="#ffffff" fill-opacity="0.18"/>
+  <circle cx="64" cy="62" r="13" fill="url(#dot)"/>
+</svg>

@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+app/tools/__pycache__/
+build/
+dist/
+.venv/
+*.gif
+*.mkv
+*.mp4
+
+# Private notes and personal files: kept on this computer, never published.
+/PLAN.md
+/docs/SPEC.md
+/Screenshot*.png

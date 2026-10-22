@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=com.gitcotech.Framewise
+Exec=/usr/bin/framewise --gapplication-service

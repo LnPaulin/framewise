@@ -1,0 +1,5 @@
+#!/bin/sh
+# Framewise launcher. Brought to you by @gitcotech.
+export PYTHONPATH="/usr/lib/framewise${PYTHONPATH:+:$PYTHONPATH}"
+# -P: never import code from the folder Framewise is started in.
+exec python3 -P -m framewise "$@"

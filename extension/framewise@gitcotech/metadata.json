@@ -1,0 +1,8 @@
+{
+  "uuid": "framewise@gitcotech",
+  "name": "Framewise",
+  "description": "Top-bar menu, recording controls, screenshot preview and clipboard history for Framewise. Brought to you by @gitcotech.",
+  "shell-version": ["46", "47", "48", "49", "50"],
+  "url": "https://t.me/gitcotech",
+  "version-name": "1.7"
+}

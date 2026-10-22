@@ -1,0 +1,35 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Framewise
+Upstream-Contact: gitcotech <https://t.me/gitcotech>
+
+Files: *
+Copyright: 2026 gitcotech
+License: GPL-3+
+ Framewise is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free
+ Software Foundation, either version 3 of the License, or (at your option)
+ any later version. Its features follow Vorssaint (GPL-3.0) by Vorssaint.
+ .
+ On Debian and Ubuntu systems, the complete text of the GNU General Public
+ License version 3 can be found in /usr/share/common-licenses/GPL-3.
+
+Files: usr/lib/framewise/framewise/models/face_detection_yunet_2023mar.onnx
+Copyright: OpenCV team (opencv_zoo, YuNet by Shiqi Yu and contributors)
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files, to deal in the Software
+ without restriction, subject to including the copyright notice and this
+ permission notice in all copies. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT
+ WARRANTY OF ANY KIND.
+
+Files: usr/lib/framewise/framewise/models/selfie_segmentation.onnx
+Copyright: Google LLC (MediaPipe Selfie Segmentation; ONNX export by onnx-community)
+License: Apache-2.0
+ On Debian and Ubuntu systems, the complete text of the Apache License 2.0 can
+ be found in /usr/share/common-licenses/Apache-2.0.
+
+Files: usr/lib/framewise/framewise/models/*.rnnn
+Copyright: GregorR/rnnoise-models
+License: none
+ The upstream README states that the models are not creative work and are not
+ subject to copyright.

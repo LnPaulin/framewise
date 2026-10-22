@@ -1,0 +1,239 @@
+.framewise-area {
+  border: 2px solid rgba(229, 72, 77, 0.95);
+  border-radius: 4px;
+}
+
+.framewise-box {
+  spacing: 6px;
+}
+
+.framewise-dot {
+  color: #e5484d;
+  font-size: 11pt;
+}
+
+.framewise-dot.paused {
+  color: #f5a623;
+}
+
+.framewise-time {
+  font-weight: bold;
+  font-feature-settings: "tnum";
+  min-width: 3.2em;
+}
+
+.framewise-button {
+  border-radius: 99px;
+  padding: 0 4px;
+}
+
+.framewise-button:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.framewise-stop .system-status-icon {
+  color: #ff6b6b;
+}
+
+.framewise-countdown {
+  background-color: rgba(18, 18, 22, 0.78);
+  border-radius: 999px;
+  color: white;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+
+.framewise-countdown:hover {
+  background-color: rgba(18, 18, 22, 0.86);
+}
+
+.framewise-countdown-number {
+  font-size: 64pt;
+  font-weight: 800;
+  font-feature-settings: "tnum";
+  color: white;
+}
+
+.framewise-countdown-hint {
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
+}
+
+.framewise-shot {
+  background-color: rgba(28, 28, 32, 0.94);
+  border-radius: 16px;
+  padding: 10px;
+  spacing: 8px;
+  color: white;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+}
+
+.framewise-shot-thumb {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.framewise-shot-thumb:hover {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.framewise-shot-note {
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.65);
+  text-align: center;
+}
+
+.framewise-shot-row {
+  spacing: 4px;
+}
+
+.framewise-shot-button {
+  border-radius: 8px;
+  padding: 5px 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: white;
+}
+
+.framewise-shot-button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.framewise-shot-button-box {
+  spacing: 5px;
+  font-size: 9.5pt;
+}
+
+/* Clipboard history */
+.framewise-clip {
+  background-color: rgba(30, 30, 34, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 10px;
+  spacing: 8px;
+  color: white;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.framewise-clip-top {
+  spacing: 6px;
+}
+
+.framewise-clip-search {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: white;
+  caret-color: white;
+  selected-color: white;
+  selection-background-color: #3584e4;
+}
+
+.framewise-clip-search StIcon {
+  icon-size: 16px;
+  padding-right: 6px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.framewise-clip-tool {
+  border-radius: 10px;
+  padding: 6px 12px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-size: 9.5pt;
+}
+
+.framewise-clip-tool:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.framewise-clip-list {
+  spacing: 2px;
+}
+
+.framewise-clip-section {
+  font-size: 8.5pt;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 8px 8px 2px 8px;
+}
+
+.framewise-clip-row {
+  border-radius: 10px;
+  padding: 6px 6px 6px 4px;
+  color: white;
+  text-align: left;
+}
+
+.framewise-clip-row:selected {
+  background-color: rgba(53, 132, 228, 0.55);
+}
+
+.framewise-clip-row-box {
+  spacing: 8px;
+}
+
+.framewise-clip-num {
+  min-width: 16px;
+  font-size: 8.5pt;
+  font-feature-settings: "tnum";
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.framewise-clip-text {
+  font-size: 10pt;
+}
+
+.framewise-clip-time {
+  font-size: 8.5pt;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.framewise-clip-thumb {
+  width: 72px;
+  height: 46px;
+  border-radius: 6px;
+  background-size: contain;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.framewise-clip-icon {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.framewise-clip-icon-button {
+  border-radius: 8px;
+  padding: 5px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.framewise-clip-icon-button:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+  color: white;
+}
+
+.framewise-clip-icon-button.pinned {
+  color: #ffbe6f;
+}
+
+.framewise-clip-empty {
+  padding: 28px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.framewise-clip-foot {
+  spacing: 6px;
+  padding: 0 2px;
+}
+
+.framewise-clip-hint {
+  font-size: 8.5pt;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Top-bar menu */
+.framewise-menu-keys {
+  font-size: 8.5pt;
+  padding-left: 24px;
+}

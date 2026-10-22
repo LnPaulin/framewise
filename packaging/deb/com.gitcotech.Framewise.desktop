@@ -1,0 +1,37 @@
+[Desktop Entry]
+Type=Application
+Name=Framewise
+GenericName=Screen Recorder and Screenshots
+Comment=Record the screen, take and mark up screenshots, copy text, clipboard history
+Keywords=record;screencast;screenshot;capture;ocr;text;clipboard;history;camera;
+Exec=framewise
+Icon=com.gitcotech.Framewise
+Terminal=false
+Categories=AudioVideo;Video;Recorder;Graphics;Utility;
+StartupNotify=true
+DBusActivatable=true
+Actions=record;screenshot;text;clipboard;camera;preferences;
+
+[Desktop Action record]
+Name=Record Screen
+Exec=framewise record
+
+[Desktop Action screenshot]
+Name=Take a Screenshot
+Exec=framewise screenshot
+
+[Desktop Action text]
+Name=Capture Text
+Exec=framewise text
+
+[Desktop Action clipboard]
+Name=Clipboard History
+Exec=framewise clipboard
+
+[Desktop Action camera]
+Name=Toggle Camera
+Exec=framewise camera
+
+[Desktop Action preferences]
+Name=Settings
+Exec=framewise settings
