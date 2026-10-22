@@ -59,11 +59,7 @@ class Home(Adw.ApplicationWindow):
         logo = Gtk.Image(icon_name="com.gitcotech.Framewise", pixel_size=72, margin_bottom=2)
         body.append(logo)
         body.append(Gtk.Label(label="Framewise", css_classes=["title-1"]))
-        body.append(credit_label())
-        support = Gtk.Label(use_markup=True, css_classes=["dim-label", "fw-home-credit"])
-        support.set_markup(f'<a href="{SUPPORT_URL}">Support Framewise</a>')
-        support.set_tooltip_text("Framewise is free. If it's useful to you, you can buy the developer a coffee.")
-        body.append(support)
+        # The credit and the support link are in Settings → About.
         if not app.session.shell.version():
             # Installed but the GNOME extension isn't running yet.
             note = Gtk.Label(wrap=True, justify=Gtk.Justification.CENTER, margin_top=10, max_width_chars=44,
@@ -99,8 +95,14 @@ class Home(Adw.ApplicationWindow):
         button = Gtk.Button(child=row, css_classes=["fw-home-tool", "card"])
 
         def clicked(_b):
+            if action == "clipboard":
+                # Opens over this window; nothing to hide.
+                self.app.activate_action(action, None)
+                return
             # Hide first and give the screen a moment: it is captured right after.
+            # This window comes back once the tool is done.
             self.app.hold()
+            self.app.back_home_later()
             self.set_visible(False)
 
             def run():

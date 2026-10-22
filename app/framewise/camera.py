@@ -105,10 +105,11 @@ class Camera:
 
     WIDTH, HEIGHT, FPS = 1280, 720, 30
 
-    def __init__(self, device_id=None):
-        """device_id: the chosen camera (/dev/videoN); falls back to the first one."""
+    def __init__(self, device_id=None, name=None):
+        """device_id: the chosen camera (/dev/videoN), name: its name (found by
+        name if its address changed); falls back to the first one."""
         from .devices import find_camera
-        cam = find_camera(device_id)
+        cam = find_camera(device_id, name)
         self.device = cam.id if cam else "/dev/video0"
         self.mjpeg = cam.mjpeg if cam else True
         self.pipeline = None
@@ -134,7 +135,7 @@ class Camera:
         self.on_paintable = None      # called with the new paintable when it changes
         self._focus_lock = False
         self._focus_timer = None
-        self._autofocus_before = None  # the camera's own autofocus setting, put back on stop
+        self._focus_changed = False   # autofocus turned off by us: turned back on at stop
 
     # Tests set this to a GStreamer source (e.g. a still picture) so they never
     # turn on the real webcam. It must end with "! ".
@@ -196,8 +197,12 @@ class Camera:
         self._apply()
         self.pipeline.set_state(Gst.State.PLAYING)
         self._meter_timer = GLib.timeout_add(250, self._meter)
-        if self._focus_lock and self.has_autofocus():
-            if self._autofocus_before is None:
+        if self.has_autofocus():
+            if not self._focus_lock:
+                # Also undoes a lock left behind if Framewise was stopped
+                # without closing the camera (e.g. logging out).
+                self._restore_autofocus(force=True)
+            elif not self._focus_changed:
                 self._lock_after_settling()
             else:
                 self._set_autofocus(False)  # restarted for effects: keep the held focus
@@ -320,16 +325,18 @@ class Camera:
             self._focus_timer = None
 
     def _set_autofocus(self, on):
-        if self._autofocus_before is None:
-            self._autofocus_before = webcam_controls.get_value(self.device, webcam_controls.FOCUS_AUTO)
+        if not on:
+            self._focus_changed = True
         webcam_controls.set_value(self.device, webcam_controls.FOCUS_AUTO, 1 if on else 0)
 
-    def _restore_autofocus(self):
-        """Gives the camera back its own setting, so other apps aren't left
-        with a locked focus."""
-        if self._autofocus_before is not None:
-            webcam_controls.set_value(self.device, webcam_controls.FOCUS_AUTO, self._autofocus_before)
-            self._autofocus_before = None
+    def _restore_autofocus(self, force=False):
+        """Back to the camera's default (autofocus on for nearly all), so
+        other apps aren't left with a locked focus."""
+        if not (self._focus_changed or force):
+            return
+        self._focus_changed = False
+        default = webcam_controls.default(self.device, webcam_controls.FOCUS_AUTO)
+        webcam_controls.set_value(self.device, webcam_controls.FOCUS_AUTO, 1 if default is None else default)
 
     # ---- settings ----------------------------------------------------------
 

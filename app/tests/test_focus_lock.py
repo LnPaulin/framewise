@@ -19,6 +19,9 @@ class FakeWebcam:
     def get_value(self, _device, control):
         return self.values.get(control)
 
+    def default(self, _device, control):
+        return 1 if control in self.values else None
+
     def set_value(self, _device, control, value):
         self.values[control] = value
         self.writes.append(value)
@@ -29,7 +32,7 @@ class FocusLockTest(unittest.TestCase):
     def setUp(self):
         self.cam_hw = FakeWebcam()
         patches = [mock.patch.object(webcam_controls, name, getattr(self.cam_hw, name))
-                   for name in ("has", "get_value", "set_value")]
+                   for name in ("has", "get_value", "set_value", "default")]
         for p in patches:
             p.start()
             self.addCleanup(p.stop)
@@ -67,6 +70,13 @@ class FocusLockTest(unittest.TestCase):
         self.assertEqual(self.autofocus(), 0)
 
     def test_closing_puts_the_camera_setting_back(self):
+        self.cam.set_focus_lock(True)
+        self.cam.pipeline = None
+        self.cam.stop()
+        self.assertEqual(self.autofocus(), 1)
+
+    def test_left_locked_by_an_earlier_run_is_undone(self):
+        self.cam_hw.values[webcam_controls.FOCUS_AUTO] = 0   # e.g. after logging out mid-preview
         self.cam.set_focus_lock(True)
         self.cam.pipeline = None
         self.cam.stop()

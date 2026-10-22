@@ -5,7 +5,6 @@ kept with the recording. Quality, size limit and the GIF settings are also
 remembered for the next recording; speed always starts at 1x.
 """
 
-import subprocess
 from pathlib import Path
 
 import gi
@@ -248,10 +247,6 @@ def open_folder(path):
 
 def copy_file_to_clipboard(path):
     """wl-copy keeps serving the clipboard after this app closes."""
+    from . import wlcopy
     uri = GLib.filename_to_uri(str(path))
-    try:
-        subprocess.run(["wl-copy", "--type", "text/uri-list"], input=uri + "\r\n",
-                       text=True, timeout=5, check=True)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+    return wlcopy.copy((uri + "\r\n").encode(), "text/uri-list")

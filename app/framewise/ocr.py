@@ -182,8 +182,5 @@ def preview(text, limit=140):
 
 
 def copy_text(text):
-    try:
-        subprocess.run(["wl-copy"], input=text.encode(), timeout=10, check=True)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+    from . import wlcopy
+    return wlcopy.copy(text.encode(), "text/plain;charset=utf-8")

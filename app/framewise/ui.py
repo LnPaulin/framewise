@@ -133,17 +133,13 @@ class Chooser(Adw.ApplicationWindow):
         self.system_row = Adw.SwitchRow(title="System audio", subtitle="Recorded on its own track")
         self.system_row.set_active(settings.get("system_audio"))
         # Microphone: Off, the system default, or a specific one.
-        from . import devices
-        self.mics = devices.microphones()
+        self._refilling = False
         self.mic_row = Adw.ComboRow(title="Microphone", subtitle="Recorded on its own track")
-        self.mic_row.set_model(Gtk.StringList.new(
-            ["Off", "Default"] + [d.name for d in self.mics]))
-        chosen = settings.get("microphone_device") or ""
-        ids = [d.id for d in self.mics]
-        if not settings.get("microphone"):
-            self.mic_row.set_selected(0)
-        else:
-            self.mic_row.set_selected(2 + ids.index(chosen) if chosen in ids else 1)
+        self.mics = []
+        self._mic_touched = False      # picked by hand in this window
+        self._fill_mics(None)
+        self.mic_row.connect("notify::selected",
+                             lambda *_: self._refilling or setattr(self, "_mic_touched", True))
         self.countdown_row = Adw.ComboRow(title="Countdown")
         options = [0, 3, 5, 10]
         self.countdown_values = options
@@ -169,14 +165,9 @@ class Chooser(Adw.ApplicationWindow):
         q = settings.get("quality")
         self.quality_row.set_selected(self.quality_values.index(q) if q in self.quality_values else 1)
         # Camera: Off or one of the cameras; choosing one opens the bubble.
-        self.cams = devices.cameras()
         self.camera_row = Adw.ComboRow(title="Camera",
                                        subtitle="Shown when recording starts")
-        self.camera_row.set_model(Gtk.StringList.new(["Off"] + [d.name for d in self.cams]))
-        cam_ids = [d.id for d in self.cams]
-        current = settings.get("camera_device")
-        if settings.get("camera") and self.cams:
-            self.camera_row.set_selected(1 + (cam_ids.index(current) if current in cam_ids else 0))
+        self.cams = []
         # The bubble appears when recording starts; Preview shows it now, to place it.
         self.preview = Gtk.ToggleButton(label="Preview", valign=Gtk.Align.CENTER, active=camera_open,
                                         tooltip_text="Show the camera to position it before recording")
@@ -184,18 +175,21 @@ class Chooser(Adw.ApplicationWindow):
         if on_preview:
             self.preview.connect("toggled", lambda b: on_preview(b.get_active()))
         self.camera_row.add_suffix(self.preview)
-        if not self.cams:
-            self.camera_row.set_subtitle("No camera found")
-            self.camera_row.set_sensitive(False)
+        self._fill_cams()
 
         def camera_changed(row, _p):
+            if self._refilling:
+                return
             i = row.get_selected()
             self.preview.set_sensitive(i != 0)
             if i == 0:
                 self.preview.set_active(False)
+            else:
+                settings.set("camera_name", self.cams[i - 1].name)
             if on_camera:
                 on_camera(None if i == 0 else self.cams[i - 1].id)
         self.camera_row.connect("notify::selected", camera_changed)
+        self._watch_devices()
         for row in (self.screen_row, self.system_row, self.mic_row, self.camera_row,
                     self.countdown_row, self.quality_row):
             prefs.add(row)
@@ -236,6 +230,71 @@ class Chooser(Adw.ApplicationWindow):
             self.close()
             return True
         return False
+
+    # ---- microphones and cameras: kept up to date while the window is open ----
+
+    def _fill_mics(self, keep):
+        """keep: the microphone picked in this window ("" = Default), if any."""
+        from . import devices
+        self._refilling = True
+        self.mics = devices.microphones()
+        self.mic_row.set_model(Gtk.StringList.new(["Off", "Default"] + [d.name for d in self.mics]))
+        ids = [d.id for d in self.mics]
+        if keep is None:
+            keep = settings.get("microphone_device") or "" if settings.get("microphone") else "off"
+        if keep == "off":
+            self.mic_row.set_selected(0)
+        else:
+            self.mic_row.set_selected(2 + ids.index(keep) if keep in ids else 1)
+        self._refilling = False
+
+    def _fill_cams(self):
+        """The chosen camera is found again by name if it came back at a new address."""
+        from . import devices
+        self._refilling = True
+        self.cams = devices.cameras()
+        self.camera_row.set_model(Gtk.StringList.new(["Off"] + [d.name for d in self.cams]))
+        chosen = devices.match_camera(self.cams, settings.get("camera_device"), settings.get("camera_name"))
+        if settings.get("camera") and chosen is not None:
+            self.camera_row.set_selected(1 + self.cams.index(chosen))
+            settings.set("camera_device", chosen.id)
+        else:
+            self.camera_row.set_selected(0)
+        self.camera_row.set_sensitive(bool(self.cams))
+        self.camera_row.set_subtitle("Shown when recording starts" if self.cams else "No camera found")
+        self.preview.set_sensitive(self.camera_row.get_selected() != 0)
+        self._refilling = False
+
+    def _watch_devices(self):
+        from . import devices
+        self._refresh_id = 0
+        devices.watch(self._on_devices_changed)
+        self.connect("destroy", self._stop_watching)
+
+    def _on_devices_changed(self):
+        # One plug-in sends several messages: refresh once they settle.
+        if self._refresh_id:
+            GLib.source_remove(self._refresh_id)
+        self._refresh_id = GLib.timeout_add(700, self._refresh_devices)
+
+    def _refresh_devices(self):
+        self._refresh_id = 0
+        # The saved microphone comes back when plugged in again, unless another
+        # was picked here meanwhile.
+        mic = self.mic_row.get_selected()
+        keep = None
+        if self._mic_touched:
+            keep = "off" if mic == 0 else (self.mics[mic - 2].id if mic >= 2 else "")
+        self._fill_mics(keep)
+        self._fill_cams()
+        return False
+
+    def _stop_watching(self, *_):
+        from . import devices
+        devices.unwatch(self._on_devices_changed)
+        if self._refresh_id:
+            GLib.source_remove(self._refresh_id)
+            self._refresh_id = 0
 
     def _on_forget(self, button):
         from . import portal

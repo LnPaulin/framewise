@@ -18,6 +18,7 @@ class ShellHelper:
         self.on_stop = None
         self.on_countdown_cancelled = None
         self.on_shot_action = None
+        self.on_bubble_corner = None
         self._proxy = None
         try:
             self._proxy = Gio.DBusProxy.new_for_bus_sync(
@@ -100,6 +101,8 @@ class ShellHelper:
             self.on_countdown_cancelled()
         elif signal == "ShotAction" and self.on_shot_action:
             self.on_shot_action(_params.unpack()[0])
+        elif signal == "BubbleCornerChanged" and self.on_bubble_corner:
+            self.on_bubble_corner(_params.unpack()[0])
 
     def show_area(self, x, y, w, h):
         self._call("ShowArea", GLib.Variant("(iiii)", (int(x), int(y), int(w), int(h))))
@@ -176,6 +179,20 @@ class ShellHelper:
 
     def show_clipboard(self):
         self._call("ShowClipboard")
+
+    # ---- camera bubble corner (1.8) ------------------------------------------
+
+    @property
+    def has_bubble_corner(self):
+        return self.version() >= (1, 8)
+
+    def bubble_corner(self):
+        """The screen corner the camera bubble is nearest, e.g. "bottom-right"."""
+        res = self._call_sync("BubbleCorner", None, 1000)
+        return res[0] if res else "bottom-right"
+
+    def set_bubble_aspect(self, ratio, margin):
+        self._call("SetBubbleAspect", GLib.Variant("(di)", (float(ratio), int(margin))))
 
 
 class ShellCountdown:

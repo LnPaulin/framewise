@@ -30,7 +30,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.7';
+const VERSION = '1.8';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -105,6 +105,16 @@ const IFACE = `
     </method>
     <method name="HideShot"/>
     <method name="ShowClipboard"/>
+    <method name="BubbleCorner">
+      <arg type="s" direction="out" name="corner"/>
+    </method>
+    <method name="SetBubbleAspect">
+      <arg type="d" direction="in" name="ratio"/>
+      <arg type="i" direction="in" name="margin"/>
+    </method>
+    <signal name="BubbleCornerChanged">
+      <arg type="s" name="corner"/>
+    </signal>
     <signal name="ShotAction">
       <arg type="s" name="action"/>
     </signal>
@@ -167,7 +177,8 @@ export default class FramewiseExtension extends Extension {
         this._countdownLabel = null;
         this._clipHistory = new ClipboardHistory();
         this._clipHistory.start();
-        this._placement = new BubblePlacement();
+        this._placement = new BubblePlacement(corner =>
+            this._dbus?.emit_signal('BubbleCornerChanged', new GLib.Variant('(s)', [corner])));
         this._placement.start();
         this._clipPicker = new ClipboardPicker(this._clipHistory);
         this._indicator = null;
@@ -304,6 +315,16 @@ export default class FramewiseExtension extends Extension {
 
     Ping() {
         return VERSION;
+    }
+
+    // The screen corner the camera bubble is nearest (BubbleCornerChanged
+    // follows it as the bubble moves).
+    BubbleCorner() {
+        return this._placement?.corner ?? 'bottom-right';
+    }
+
+    SetBubbleAspect(ratio, margin) {
+        this._placement?.setAspect(ratio, margin);
     }
 
     // A border just outside a selected area, so it never shows in the video.

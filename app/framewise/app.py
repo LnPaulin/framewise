@@ -410,6 +410,11 @@ class Framewise(Adw.Application):
         from . import user_setup
         user_setup.ensure()
 
+    def do_shutdown(self):
+        from . import devices
+        devices.shutdown()
+        Adw.Application.do_shutdown(self)
+
     def stay_running(self):
         """Like a menu-bar app: once started, Framewise keeps running (its icon
         at the top right, clipboard history) until Quit, windows open or not."""
@@ -495,6 +500,32 @@ class Framewise(Adw.Application):
         self.chooser.connect("close-request", self._chooser_closed)
         self.chooser.present()
 
+    def back_home_later(self):
+        """A tool was opened from the home window: show it again when the
+        tool's windows are all closed (and no recording is running)."""
+        if not getattr(self, "_back_home", False):
+            self._back_home = True
+            self.connect("window-removed", self._on_window_removed)
+
+    def _on_window_removed(self, *_):
+        if getattr(self, "_back_home", False):
+            # A moment later: a screenshot may still be being taken, or the
+            # next window (the editor after a recording) is about to open.
+            GLib.timeout_add(900, self._maybe_back_home)
+
+    def _maybe_back_home(self):
+        if not getattr(self, "_back_home", False):
+            return False
+        if any(w.get_visible() for w in self.get_windows()):
+            return False
+        if self.session.phase != Session.IDLE or (self.shots is not None and self.shots.busy):
+            GLib.timeout_add(900, self._maybe_back_home)
+            return False
+        self._back_home = False
+        self.disconnect_by_func(self._on_window_removed)
+        self.show_home()
+        return False
+
     def show_home(self):
         from .home import Home
         if getattr(self, "home", None) is not None:
@@ -522,6 +553,9 @@ class Framewise(Adw.Application):
             # Still saving the recording: try again in a moment.
             GLib.timeout_add(400, lambda: self.quit_app() and False)
             return
+        if getattr(self, "_back_home", False):
+            self._back_home = False
+            self.disconnect_by_func(self._on_window_removed)
         if getattr(self, "_resident", False):
             self._resident = False
             self.release()

@@ -8,7 +8,6 @@ and a notification offers the same actions.
 """
 
 import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -24,7 +23,7 @@ PREVIEW_SECONDS = 6
 DEFAULT_FOLDER = str(Path.home() / "Pictures" / "Screenshots")
 
 
-def shot_destination(folder=None, suffix=".png"):
+def shot_destination(folder=None, suffix=".png", prefix="Screenshot"):
     folder = Path(folder or settings.get("shot_folder") or DEFAULT_FOLDER).expanduser()
     try:
         folder.mkdir(parents=True, exist_ok=True)
@@ -32,22 +31,18 @@ def shot_destination(folder=None, suffix=".png"):
         folder = Path.home() / "Pictures"
         folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d at %H.%M.%S")
-    path = folder / f"Screenshot {stamp}{suffix}"
+    path = folder / f"{prefix} {stamp}{suffix}"
     n = 2
     while path.exists():
-        path = folder / f"Screenshot {stamp} ({n}){suffix}"
+        path = folder / f"{prefix} {stamp} ({n}){suffix}"
         n += 1
     return path
 
 
 def copy_image(path):
     """Puts the PNG on the clipboard; wl-copy keeps it there after the app closes."""
-    try:
-        with open(path, "rb") as f:
-            subprocess.run(["wl-copy", "--type", "image/png"], stdin=f, timeout=10, check=True)
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
+    from . import wlcopy
+    return wlcopy.copy_file(path, "image/png")
 
 
 def crop_png(src, dest, rect, ratio, origin=(0, 0)):

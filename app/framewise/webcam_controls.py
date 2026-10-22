@@ -50,6 +50,22 @@ def has(device, control):
         os.close(fd)
 
 
+def default(device, control):
+    """The control's factory default, or None."""
+    try:
+        fd = _open(device)
+    except OSError:
+        return None
+    try:
+        buf = bytearray(_QUERYCTRL.pack(control, 0, b"", 0, 0, 0, 0, 0))
+        fcntl.ioctl(fd, VIDIOC_QUERYCTRL, buf)
+        return _QUERYCTRL.unpack(buf)[6]
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
 def get_value(device, control):
     """The control's value, or None if it can't be read."""
     try:

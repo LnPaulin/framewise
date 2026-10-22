@@ -1,13 +1,21 @@
-"""Lists the microphones and cameras the user can choose from."""
+"""Lists the microphones and cameras the user can choose from.
+
+One device monitor runs for the whole app, from the first time it's asked:
+it notices devices plugged in or out, and GStreamer's device providers are
+shared, so starting and stopping several monitors could crash the app.
+"""
 
 from dataclasses import dataclass
 
 import gi
 
 gi.require_version("Gst", "1.0")
-from gi.repository import Gst  # noqa: E402
+from gi.repository import GLib, Gst  # noqa: E402
 
 Gst.init(None)
+
+_monitor = None
+_listeners = []
 
 
 @dataclass
@@ -23,21 +31,59 @@ def _props(dev):
     return get
 
 
+def _get_monitor():
+    global _monitor
+    if _monitor is None:
+        monitor = Gst.DeviceMonitor.new()
+        monitor.add_filter("Audio/Source", None)
+        monitor.add_filter("Video/Source", None)
+        monitor.get_bus().add_watch(GLib.PRIORITY_DEFAULT, _on_message)
+        monitor.start()
+        _monitor = monitor
+    return _monitor
+
+
+def _on_message(_bus, msg):
+    if msg.type in (Gst.MessageType.DEVICE_ADDED, Gst.MessageType.DEVICE_REMOVED):
+        for callback in list(_listeners):
+            callback()
+    return True
+
+
+def watch(callback):
+    """callback() whenever a microphone or camera is plugged in or out
+    (several times for one device: wait a moment before acting)."""
+    _get_monitor()
+    _listeners.append(callback)
+
+
+def unwatch(callback):
+    if callback in _listeners:
+        _listeners.remove(callback)
+
+
+def shutdown():
+    """Stops the device monitor (when the app quits)."""
+    global _monitor
+    if _monitor is not None:
+        _monitor.get_bus().remove_watch()
+        _monitor.stop()
+        _monitor = None
+    _listeners.clear()
+
+
 def _scan(kind):
-    monitor = Gst.DeviceMonitor.new()
-    monitor.add_filter(kind, None)
-    monitor.start()
-    devices = monitor.get_devices()
-    monitor.stop()
-    return devices
+    return [d for d in (_get_monitor().get_devices() or []) if d.has_classes(kind)]
 
 
 def _clean(name):
-    # "HP 5MP Camera: HP 5MP Camera" -> "HP 5MP Camera"; drop "(V4L2)" tags.
+    # "HP 5MP Camera: HP 5MP Camera" -> "HP 5MP Camera",
+    # "EMEET SmartCam C960 AF: EMEET S" -> "EMEET SmartCam C960 AF"; drop "(V4L2)" tags.
     name = name.replace(" (V4L2)", "")
     if ": " in name:
         a, b = name.split(": ", 1)
-        name = b if b.startswith(a) or a.startswith(b) else name
+        if b.startswith(a) or a.startswith(b):
+            name = max(a, b, key=len)
     return name
 
 
@@ -71,13 +117,21 @@ def cameras():
     return sorted(found.values(), key=lambda d: d.id)
 
 
-def find_camera(device_id=None):
+def match_camera(cams, device_id, name=None):
+    """The chosen camera among cams, or None. A camera plugged back in can get
+    a new address (/dev/video4 -> /dev/video6), so the name decides when the
+    address is gone or now belongs to another camera."""
+    by_id = next((c for c in cams if c.id == device_id), None)
+    if by_id is not None and (not name or by_id.name == name):
+        return by_id
+    by_name = next((c for c in cams if name and c.name == name), None)
+    return by_name or by_id
+
+
+def find_camera(device_id=None, name=None):
     """The chosen camera if it is still plugged in, else the first one."""
     cams = cameras()
-    for cam in cams:
-        if cam.id == device_id:
-            return cam
-    return cams[0] if cams else None
+    return match_camera(cams, device_id, name) or (cams[0] if cams else None)
 
 
 def output_delay():
