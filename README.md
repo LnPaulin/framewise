@@ -26,7 +26,7 @@ Needs Ubuntu 24.04 or newer with GNOME (made and tested on Ubuntu 26.04,
 GNOME 50).
 
 ```bash
-sudo apt install ./framewise_1.0.0_all.deb
+sudo apt install ./framewise_1.0.1_all.deb
 ```
 
 Use `apt`, not `dpkg -i`: apt also installs what Framewise needs (GStreamer,
