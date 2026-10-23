@@ -141,12 +141,19 @@ class Updates:
         return False
 
     def restart(self, command="--background"):
-        """Starts the new version in place of this one (same process, so the
-        app's D-Bus name moves over cleanly), in the background or with a
-        command (e.g. "settings" to come back to Settings)."""
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os.execv(sys.executable, [sys.executable, "-P", "-m", "framewise", command])
+        """Starts the new version, in the background or with a command (e.g.
+        "settings" to come back to Settings). A small helper waits until this
+        process has fully quit (and so let go of the app's D-Bus name), then
+        starts the new one. Restarting in place instead could leave the new
+        copy thinking Framewise was still running, waiting on it, and exit."""
+        import subprocess
+        new = [sys.executable, "-P", "-m", "framewise", command]
+        wait = ('n=0; while kill -0 "$0" 2>/dev/null && [ $n -lt 100 ]; do sleep 0.2; n=$((n+1)); done; '
+                'exec "$@"')
+        # Same output as this process (the journal, when GNOME started it).
+        subprocess.Popen(["/bin/sh", "-c", wait, str(os.getpid()), *new], start_new_session=True,
+                         stdin=subprocess.DEVNULL)
+        self.app.quit()
 
     # ---- Update Now ----------------------------------------------------------------------
 
