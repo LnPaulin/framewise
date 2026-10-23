@@ -273,6 +273,9 @@ class SettingsWindow(Adw.PreferencesWindow):
                           "check_updates"))
         row = Adw.ActionRow(title="Check now")
         button = Gtk.Button(label="Check", valign=Gtk.Align.CENTER)
+        update = Gtk.Button(label="Update Now", valign=Gtk.Align.CENTER, visible=False,
+                            css_classes=["suggested-action"])
+        updates = self.app.updates
 
         def done(latest, error):
             from . import __version__
@@ -282,15 +285,33 @@ class SettingsWindow(Adw.PreferencesWindow):
                 row.set_subtitle("Couldn't reach GitHub. Check your connection.")
             elif parse(latest) > parse(__version__):
                 row.set_subtitle(f"Framewise {latest} is available")
+                update.set_visible(updates is not None)
+                button.set_visible(False)
             else:
                 row.set_subtitle("Framewise is up to date")
 
         def check(_b):
-            if self.app.updates is None:
+            if updates is None:
                 return
             button.set_sensitive(False)
             row.set_subtitle("Checking…")
-            self.app.updates.check(done)
+            updates.check(done)
+
+        def progress(percent, text):
+            row.set_subtitle(f"{text} {percent}%" if percent is not None else text)
+
+        def installed(ok, message):
+            update.set_sensitive(True)
+            row.set_subtitle(message + ("; restarting…" if ok and message == "Updated" else ""))
+            if ok:
+                update.set_visible(False)
+
+        def install(_b):
+            update.set_sensitive(False)
+            row.set_subtitle("Starting…")
+            updates.install(progress, installed)
+        update.connect("clicked", install)
+        row.add_suffix(update)
         button.connect("clicked", check)
         row.add_suffix(button)
         group.add(row)

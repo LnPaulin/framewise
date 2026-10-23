@@ -11,6 +11,8 @@ Software Updater. This module handles the rest:
   to log out when the GNOME extension changed too (GNOME loads it at login).
 - Update check: about once a day, ask GitHub for the latest release and say
   when a newer one is out (Settings → About can turn this off).
+- Update Now: installs the new version through PackageKit (Ubuntu asks for
+  the password as usual), then restarts Framewise.
 """
 
 import json
@@ -70,6 +72,7 @@ class Updates:
         self._settle_id = 0
         self._monitor = None
         self._checking = False
+        self._installing = False
 
     def start(self):
         self._note_update()
@@ -137,12 +140,92 @@ class Updates:
         self.restart()
         return False
 
-    def restart(self):
+    def restart(self, command="--background"):
         """Starts the new version in place of this one (same process, so the
-        app's D-Bus name moves over cleanly), in the background."""
+        app's D-Bus name moves over cleanly), in the background or with a
+        command (e.g. "settings" to come back to Settings)."""
         sys.stdout.flush()
         sys.stderr.flush()
-        os.execv(sys.executable, [sys.executable, "-P", "-m", "framewise", "--background"])
+        os.execv(sys.executable, [sys.executable, "-P", "-m", "framewise", command])
+
+    # ---- Update Now ----------------------------------------------------------------------
+
+    @property
+    def can_install(self):
+        """Installed from the package with PackageKit around (else: Software Updater)."""
+        return APT_SOURCE.exists() and _packagekit() is not None
+
+    @property
+    def installing(self):
+        return self._installing
+
+    def install(self, on_progress=None, on_done=None):
+        """Updates Framewise now. on_progress(percent or None, text) and
+        on_done(ok, message) run on the main loop. Restarts Framewise after a
+        successful update when nothing is in progress."""
+        if self._installing:
+            return
+        pk = _packagekit()
+        if pk is None or not APT_SOURCE.exists():
+            open_updater()
+            return
+        self._installing = True
+
+        stage = ["Looking for the update…"]
+
+        def report(percent, text):
+            stage[0] = text
+            if on_progress:
+                GLib.idle_add(lambda: on_progress(percent, text) and False)
+
+        def progress(prog, kind, *_):
+            if kind == pk.ProgressType.PERCENTAGE:
+                value = prog.get_property("percentage")
+                report(value if 0 <= value <= 100 else None, stage[0])
+
+        def work():
+            ok, message = False, ""
+            try:
+                client = pk.Client()
+                report(None, "Looking for the update…")
+                client.refresh_cache(False, None, progress, None)
+                found = [p for p in client.get_updates(1 << int(pk.FilterEnum.NONE), None, progress, None)
+                         .get_package_array() if p.get_name() == "framewise"]
+                if not found:
+                    ok, message = True, "Framewise is up to date"
+                else:
+                    report(None, "Installing…")
+                    result = client.update_packages(1 << int(pk.TransactionFlagEnum.ONLY_TRUSTED),
+                                                    [found[0].get_id()], None, progress, None)
+                    ok = result.get_exit_code() == pk.ExitEnum.SUCCESS
+                    message = "Updated" if ok else "The update didn't finish"
+            except GLib.Error as e:
+                message = _friendly_error(e.message)
+            GLib.idle_add(self._installed, ok, message, on_done)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _installed(self, ok, message, on_done):
+        self._installing = False
+        if on_done:
+            on_done(ok, message)
+        if ok and message == "Updated":
+            self._restart_after_install()
+        elif not ok and on_done is None:
+            n = Gio.Notification.new("Framewise couldn't be updated")
+            n.set_body(message)
+            self.app.send_notification("update-failed", n)
+        return False
+
+    def _restart_after_install(self):
+        """Right away if only Settings or the home window is open (Settings
+        comes back); otherwise once the work in progress is done."""
+        app = self.app
+        names = {type(w).__name__ for w in app.get_windows() if w.get_visible()}
+        if app.session.phase == app.session.IDLE and names <= {"SettingsWindow", "Home"}:
+            self.restart("settings" if "SettingsWindow" in names else "--background")
+        elif self._restart_pending is None:
+            self._restart_pending = "installed"
+            GLib.timeout_add_seconds(2, self._restart_when_idle)
 
     # ---- update check ------------------------------------------------------------------
 
@@ -187,7 +270,11 @@ class Updates:
     def _announce(self, latest):
         n = Gio.Notification.new(f"Framewise {latest} is available")
         whats_new = Gio.Action.print_detailed_name("app.whats-new", GLib.Variant("s", latest))
-        if APT_SOURCE.exists() and shutil.which("update-manager"):
+        if self.can_install:
+            n.set_body("Update now, or later from Software Updater.")
+            n.set_default_action("app.install-update")
+            n.add_button("Update Now", "app.install-update")
+        elif APT_SOURCE.exists() and shutil.which("update-manager"):
             n.set_body("Install it from Software Updater.")
             n.set_default_action("app.open-updater")
             n.add_button("Open Software Updater", "app.open-updater")
@@ -196,6 +283,27 @@ class Updates:
             n.set_default_action(whats_new)
         n.add_button("What's New", whats_new)
         self.app.send_notification("update-available", n)
+
+
+def _packagekit():
+    try:
+        import gi
+        gi.require_version("PackageKitGlib", "1.0")
+        from gi.repository import PackageKitGlib
+        return PackageKitGlib
+    except (ImportError, ValueError):
+        return None
+
+
+def _friendly_error(message):
+    text = (message or "").lower()
+    if "auth" in text or "polkit" in text or "not authorized" in text:
+        return "The password wasn't given, so nothing was changed"
+    if "lock" in text:
+        return "Another program is installing updates. Try again when it's done"
+    if "network" in text or "resolve" in text or "download" in text:
+        return "Couldn't download the update. Check your connection"
+    return message or "Unknown error"
 
 
 def open_updater():

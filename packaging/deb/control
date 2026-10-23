@@ -13,7 +13,7 @@ Depends: python3 (>= 3.12), python3-gi, python3-gi-cairo, python3-cairo, python3
  gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gstreamer1.0-gtk4,
  ffmpeg, wl-clipboard, tesseract-ocr, tesseract-ocr-eng, xdg-desktop-portal-gnome,
  gnome-shell (>= 46)
-Recommends: sound-theme-freedesktop, gstreamer1.0-plugins-extra | gstreamer1.0-vaapi, python3-opencv, python3-venv,
+Recommends: sound-theme-freedesktop, packagekit, gir1.2-packagekitglib-1.0, gstreamer1.0-plugins-extra | gstreamer1.0-vaapi, python3-opencv, python3-venv,
  intel-media-va-driver | mesa-va-drivers | va-driver-all
 Suggests: tesseract-ocr-fra, tesseract-ocr-spa, tesseract-ocr-deu
 Description: Screen recorder, screenshots, text from the screen and clipboard history
