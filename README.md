@@ -5,6 +5,8 @@ Ubuntu (GNOME). Brought to you by [@gitcotech](https://t.me/gitcotech).
 
 <a href="https://buymeacoffee.com/framewise"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="180" alt="Buy Me a Coffee"></a>
 
+![Framewise: editing a recording, the polished result, screenshot markup, the camera bubble, text capture and clipboard history](docs/media/framewise-demo.gif)
+
 - **Record** an area, a window or the whole screen, with system sound, your
   microphone (each on its own track) and a camera bubble. Then edit: trim and
   cut, silence and filler-word removal, noise reduction, auto zoom (clicks and

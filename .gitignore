@@ -5,6 +5,7 @@ build/
 dist/
 .venv/
 *.gif
+!docs/media/*.gif
 *.mkv
 *.mp4
 
