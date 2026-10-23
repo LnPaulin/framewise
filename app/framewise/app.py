@@ -624,8 +624,10 @@ class Framewise(Adw.Application):
     # ---- screenshots -----------------------------------------------------------------
 
     def take_screenshot(self, whole_screen=False, delay=0, text=False):
-        if self.session.phase != Session.IDLE:
-            return   # not while recording: the picker would cover the recording
+        if self.session.phase == Session.PREPARING:
+            return   # a recording is starting (choosing its area, counting down)
+        # During a recording it's allowed: showing a screenshot being taken is
+        # a normal part of a tutorial, and the picker is then in the video.
         if self.shots is None:
             from .shots import ShotSession
             self.shots = ShotSession(self)
