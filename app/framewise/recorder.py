@@ -123,7 +123,8 @@ class Recorder:
         )
 
     def _build(self):
-        desc = f"matroskamux name=mux writing-app=framewise ! filesink location=\"{self.out_path}\" "
+        desc = (f"matroskamux name=mux writing-app=framewise ! "
+                f"filesink name=fsink location=\"{self.out_path}\" ")
         desc += self._video_branch()
         if self.system_audio:
             desc += self._audio_branch("system", "@DEFAULT_MONITOR@")
@@ -154,6 +155,12 @@ class Recorder:
             pad = pipe.get_by_name(name).get_static_pad("src")
             pad.add_probe(Gst.PadProbeType.BUFFER, self._gate, name)
             self._entry_pads.append(pad)
+            # A flush means "start over" to the file writer: it empties the file.
+            # The screen feed can send one (e.g. as GNOME ends the share), which
+            # would wipe the whole recording. Nothing downstream ever needs one.
+            pad.add_probe(Gst.PadProbeType.EVENT_FLUSH, lambda *_: Gst.PadProbeReturn.DROP)
+        pipe.get_by_name("fsink").get_static_pad("sink").add_probe(
+            Gst.PadProbeType.EVENT_FLUSH, lambda *_: Gst.PadProbeReturn.DROP)
         # GNOME's own "stop sharing" button (top right) cuts the screen share.
         # The video branch then ends on its own; finish the whole file from it.
         pipe.get_by_name("vgate").get_static_pad("src").add_probe(

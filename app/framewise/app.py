@@ -322,9 +322,12 @@ class Session:
             return
         if settings.get("open_editor"):
             # The editor decides what to keep; it saves (or deletes) the take.
-            export.write_take_info(self.take_dir, {**self._take_info(), "crop": self.crop})
-            self.app.open_editor(self.take_dir, after_recording=True)
-            self._reset()
+            # Whatever happens, the session is ready for the next recording.
+            try:
+                export.write_take_info(self.take_dir, {**self._take_info(), "crop": self.crop})
+                self.app.open_editor(self.take_dir, after_recording=True)
+            finally:
+                self._reset()
             return
         dest = export.destination(settings.get("folder"))
         doc, info, duration = None, None, None
@@ -645,13 +648,22 @@ class Framewise(Adw.Application):
     # ---- editor --------------------------------------------------------------------
 
     def open_editor(self, take_dir, after_recording=False):
+        """Returns False (after telling the user) if the take can't be opened."""
         from .editor import Editor
-        self.hold()  # keep running while an editor is open
         # After a new recording is saved, the record window comes back, ready
         # for the next one.
-        editor = Editor(self, take_dir, on_closed=self.release,
-                        on_saved=self.show_chooser if after_recording else None)
+        try:
+            editor = Editor(self, take_dir, on_closed=self.release,
+                            on_saved=self.show_chooser if after_recording else None)
+        except Exception as e:  # noqa: BLE001 - an unreadable take must not take the app down
+            print(f"Framewise: couldn't open {take_dir}: {e!r}", file=sys.stderr)
+            self.notify("The recording couldn't be opened",
+                        f"The video file is damaged. The raw take is kept in {take_dir}",
+                        open_path=str(Path(take_dir) / "take.mkv"))
+            return False
+        self.hold()  # keep running while an editor is open
         editor.present()
+        return True
 
     # ---- camera bubble ---------------------------------------------------------
 
