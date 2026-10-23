@@ -118,7 +118,12 @@
   spacing: 6px;
 }
 
-.framewise-clip-search {
+/* Every state: GNOME's own :focus/:hover entry styles (dark text in the
+   light shell theme) would otherwise win and hide what's typed. */
+.framewise-clip-search,
+.framewise-clip-search:focus,
+.framewise-clip-search:hover,
+.framewise-clip-search:active {
   border-radius: 10px;
   padding: 8px 10px;
   background-color: rgba(255, 255, 255, 0.08);
@@ -127,6 +132,11 @@
   caret-color: white;
   selected-color: white;
   selection-background-color: #3584e4;
+  box-shadow: none;
+}
+
+.framewise-clip-search StLabel.hint-text {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .framewise-clip-search StIcon {

@@ -30,7 +30,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.8';
+const VERSION = '1.9';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -511,6 +511,8 @@ export default class FramewiseExtension extends Extension {
             const stream = Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.NONE, null);
             await new Shell.Screenshot().screenshot(includeCursor, stream);
             stream.close(null);
+            // Captured with the clipboard list on screen, if it was opened for that.
+            this._clipPicker?.shotTaken();
             invocation.return_value(new GLib.Variant('(b)', [true]));
         } catch (e) {
             console.error(`framewise screenshot: ${e}`);

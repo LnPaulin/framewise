@@ -14,10 +14,10 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import {prettyKeys, shortcutFor} from './keys.js';
+
 const APP_ID = 'com.gitcotech.Framewise';
 const APP_PATH = '/com/gitcotech/Framewise';
-const KEYS_SCHEMA = 'org.gnome.settings-daemon.plugins.media-keys';
-const KEYS_BASE = '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/';
 
 // [app action, label, icon, shortcut id]
 const ITEMS = [
@@ -28,30 +28,6 @@ const ITEMS = [
     ['camera', 'Show Camera', 'camera-web-symbolic', 'framewise-camera'],
 ];
 const CAMERA_TITLE = 'framewise camera';
-
-// '<Shift><Super>s' -> 'Shift+Super+S'
-export function prettyKeys(accel) {
-    if (!accel)
-        return '';
-    const mods = [...accel.matchAll(/<([^>]+)>/g)].map(m => m[1])
-        .map(m => ({Primary: 'Ctrl', Control: 'Ctrl', Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift',
-            Super: 'Super', Meta: 'Super'})[m] ?? m);
-    const key = accel.replace(/<[^>]+>/g, '');
-    const name = key.length === 1 ? key.toUpperCase() : key;
-    return [...mods, name].join('+');
-}
-
-function shortcutFor(id) {
-    try {
-        const paths = new Gio.Settings({schema_id: KEYS_SCHEMA}).get_strv('custom-keybindings');
-        const path = `${KEYS_BASE}${id}/`;
-        if (!paths.includes(path))
-            return '';
-        return new Gio.Settings({schema_id: `${KEYS_SCHEMA}.custom-keybinding`, path}).get_string('binding');
-    } catch (e) {
-        return '';
-    }
-}
 
 export const Indicator = GObject.registerClass(
 class FramewiseIndicator extends PanelMenu.Button {

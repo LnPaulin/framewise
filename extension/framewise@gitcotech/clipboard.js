@@ -17,6 +17,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {vbox} from './compat.js';
+import {matches, shortcutFor} from './keys.js';
 
 const DATA_DIR = GLib.build_filenamev([GLib.get_user_data_dir(), 'framewise', 'clipboard']);
 const HISTORY_FILE = GLib.build_filenamev([DATA_DIR, 'history.json']);
@@ -30,6 +31,12 @@ const DEFAULTS = {
     clipboard_skip_sensitive: false,
 };
 const MAX_TEXT = 1000000;               // characters
+const APP_ID = 'com.gitcotech.Framewise';
+const APP_PATH = '/com/gitcotech/Framewise';
+// Framewise's capture shortcuts, which still work while this list is open
+// (it holds the keyboard, so GNOME doesn't run shortcuts): [shortcut id, app action].
+const CAPTURE_KEYS = [['framewise-screenshot', 'screenshot'], ['framewise-print', 'screenshot'],
+    ['framewise-text', 'text']];
 const MAX_IMAGE_BYTES = 40 * 1024 * 1024;
 const MAX_ROWS = 300;                   // shown at once; search reaches the rest
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff'];
@@ -441,6 +448,12 @@ export class ClipboardPicker {
         this._search = new St.Entry({style_class: 'framewise-clip-search', hint_text: 'Search clipboard history',
             can_focus: true, x_expand: true});
         this._search.set_primary_icon(new St.Icon({icon_name: 'edit-find-symbolic', icon_size: 16}));
+        // GNOME 50 doesn't pass the entry's text colour (stylesheet.css) on to
+        // the text itself, which then stays black on the dark panel.
+        const syncColor = () => this._search.clutter_text.set_color(
+            this._search.get_theme_node().get_foreground_color());
+        this._search.connect('style-changed', syncColor);
+        this._search.connect('notify::mapped', syncColor);
         top.add_child(this._search);
         this._pauseButton = new St.Button({style_class: 'framewise-clip-tool', can_focus: false});
         this._pauseButton.connect('clicked', () => {
@@ -495,6 +508,11 @@ export class ClipboardPicker {
     }
 
     close() {
+        if (this._shotTimeout) {
+            GLib.source_remove(this._shotTimeout);
+            this._shotTimeout = 0;
+        }
+        this._waitingForShot = false;
         this._unwatch?.();
         this._unwatch = null;
         if (this._grab) {
@@ -640,7 +658,36 @@ export class ClipboardPicker {
         this._updateFooter();
     }
 
+    // A screenshot (or text capture) shortcut pressed with the list open:
+    // the app captures the screen with the list on it, then the list closes
+    // (shotTaken), so the list itself can be in the screenshot.
+    _capture(action) {
+        this._waitingForShot = true;
+        Gio.DBus.session.call(APP_ID, APP_PATH, 'org.freedesktop.Application', 'ActivateAction',
+            new GLib.Variant('(sava{sv})', [action, [], {}]), null, Gio.DBusCallFlags.NONE, -1, null, null);
+        // If no capture comes (app busy, not running), don't stay open.
+        this._shotTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 4000, () => {
+            this._shotTimeout = 0;
+            if (this._waitingForShot)
+                this.close();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // Called once the screen has been captured.
+    shotTaken() {
+        if (this._waitingForShot)
+            this.close();
+    }
+
     _key(event) {
+        for (const [id, action] of CAPTURE_KEYS) {
+            if (matches(event, shortcutFor(id))) {
+                if (!this._waitingForShot)
+                    this._capture(action);
+                return Clutter.EVENT_STOP;
+            }
+        }
         const sym = event.get_key_symbol();
         const ctrl = (event.get_state() & Clutter.ModifierType.CONTROL_MASK) !== 0;
         const count = this._rows.length;
