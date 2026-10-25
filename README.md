@@ -7,7 +7,7 @@ Ubuntu (GNOME). Brought to you by [@gitcotech](https://t.me/gitcotech).
 
 ![Framewise: editing a recording, the polished result, screenshot markup, the camera bubble, text capture and clipboard history](docs/media/framewise-demo.gif)
 
-▶️ **[Watch the 80-second video on YouTube](https://youtu.be/6UoFmkL_900)**
+**[Watch the 80-second video on YouTube](https://youtu.be/6UoFmkL_900)**
 
 - **Record** an area, a window or the whole screen, with system sound, your
   microphone (each on its own track) and a camera bubble. Then edit: trim and
