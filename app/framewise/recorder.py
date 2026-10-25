@@ -51,7 +51,7 @@ def free_bytes(path):
 class Recorder:
     def __init__(self, capture, out_path, *, fps=60, quality="high",
                  system_audio=True, microphone=True, microphone_device="",
-                 window_mode=False):
+                 window_mode=False, window_size=None):
         self.capture = capture
         self.out_path = str(out_path)
         self.fps = fps
@@ -60,6 +60,7 @@ class Recorder:
         self.microphone = microphone
         self.microphone_device = microphone_device
         self.window_mode = window_mode
+        self.window_size = window_size   # (w, h) of a real frame of the window, if known
 
         self.on_error = None      # (message) -> None
         self.on_finished = None   # (ok: bool) -> None
@@ -92,8 +93,10 @@ class Recorder:
         qpi, qpp = QUALITY_QP.get(self.quality, QUALITY_QP["high"])
         size = ""
         if self.window_mode:
-            # A window can be resized while recording; keep the video size fixed.
-            size = f",width={s.width - s.width % 2},height={s.height - s.height % 2}"
+            # A window can be resized while recording; keep the video size fixed,
+            # at the size of the window's real picture.
+            w, h = self.window_size or (s.width, s.height)
+            size = f",width={w - w % 2},height={h - h % 2}"
         # On the graphics chip when it can (VA-API), in software otherwise.
         if gpu.gst_va():
             convert, memory = "vapostproc add-borders=true", "video/x-raw(memory:VAMemory)"
@@ -104,7 +107,9 @@ class Recorder:
             f"do-timestamp=true keepalive-time=100 on-disconnect=eos client-name=framewise ! "
             f"queue max-size-buffers=8 leaky=downstream ! "
             f"{convert} ! "
-            f"{memory},format=NV12{size} ! "
+            # Square pixels: a picture that doesn't fit (the window was resized)
+            # gets black bars instead of being stretched to the video's shape.
+            f"{memory},format=NV12{size},pixel-aspect-ratio=1/1 ! "
             f"videorate ! capsfilter name=vgate caps=\"{memory},framerate={self.fps}/1\" ! "
             f"queue max-size-buffers=30 ! "
             f"{gpu.h264_encoder((qpi, qpp), self.fps * 2)} ! "

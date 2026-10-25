@@ -106,8 +106,18 @@ class Session:
         self.monitor = ui.monitor_for(cap.stream)
         if mode == "area":
             frame.grab(cap, self._show_selector)
+        elif mode == "window":
+            # The size GNOME reports for a window can differ from the picture it
+            # sends: take the size from a real frame, or the video comes out stretched.
+            frame.grab(cap, self._window_ready)
         else:
-            self._prepare(window_mode=(mode == "window"))
+            self._prepare(window_mode=False)
+
+    def _window_ready(self, still):
+        if self.phase != self.PREPARING:
+            return
+        size = (still.get_width(), still.get_height()) if still is not None else None
+        self._prepare(window_mode=True, window_size=size)
 
     def _show_selector(self, still):
         if self.phase != self.PREPARING:
@@ -122,14 +132,15 @@ class Session:
         self.crop = rect
         self._prepare(window_mode=False)
 
-    def _prepare(self, window_mode):
+    def _prepare(self, window_mode, window_size=None):
         self.window_mode = window_mode
         self.take_dir = export.new_take_dir()
         self.recorder = Recorder(
             self.capture, self.take_dir / "take.mkv",
             fps=settings.get("fps"), quality=settings.get("quality"),
             system_audio=settings.get("system_audio"), microphone=settings.get("microphone"),
-            microphone_device=settings.get("microphone_device"), window_mode=window_mode)
+            microphone_device=settings.get("microphone_device"), window_mode=window_mode,
+            window_size=window_size)
         self.recorder.on_finished = self._on_recorded
         self.recorder.on_error = lambda m: self.app.notify("Recording error", m)
         self.recorder.on_low_disk = lambda: self.app.notify(
