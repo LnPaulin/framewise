@@ -30,12 +30,19 @@ class CommandTests(unittest.TestCase):
         self.assertTrue(any("amix=inputs=2" in c for c in cmd))
 
     def test_area_reencodes_on_gpu(self):
-        cmd = export.build_command("t.mkv", "o.mp4", (10, 20, 300, 200), 1)
+        cmd = export.build_command("t.mkv", "o.mp4", (10, 20, 300, 200), 1, hw=True)
         self.assertIn("h264_vaapi", cmd)
         self.assertTrue(any("crop=300:200:10:20" in c for c in cmd))
         # Square pixels, or players stretch the area back to the screen shape.
         self.assertTrue(any("setsar=1" in c for c in cmd))
         self.assertIn("0:a:0", cmd)
+
+    def test_area_reencodes_in_software(self):
+        # No graphics chip (NVIDIA driver, virtual machine): x264, same crop.
+        cmd = export.build_command("t.mkv", "o.mp4", (10, 20, 300, 200), 1, hw=False)
+        self.assertIn("libx264", cmd)
+        self.assertNotIn("h264_vaapi", cmd)
+        self.assertTrue(any("crop=300:200:10:20" in c and "setsar=1" in c for c in cmd))
 
     def test_no_audio(self):
         cmd = export.build_command("t.mkv", "o.mp4", None, 0)
@@ -87,12 +94,21 @@ class ExportOptionTests(unittest.TestCase):
         self.assertIsNone(export.fit_plan(3600, (1920, 1080), 60, True, 10))  # an hour in 10 MB
 
     def test_bitrate_mode(self):
-        cmd = export.build_edit_command("t.mkv", "o.mp4", self.doc(), [], fps=60,
+        cmd = export.build_edit_command("t.mkv", "o.mp4", self.doc(), [], fps=60, hw=True,
                                         out={"bitrate": 2_000_000, "fps": 30, "size": (1280, 720)})
         self.assertIn("VBR", cmd)
         self.assertIn("30", cmd)
         graph = cmd[cmd.index("-filter_complex") + 1]
         self.assertIn("scale_vaapi=w=1280:h=720", graph)
+
+    def test_bitrate_mode_in_software(self):
+        cmd = export.build_edit_command("t.mkv", "o.mp4", self.doc(), [], fps=60, hw=False,
+                                        out={"bitrate": 2_000_000, "fps": 30, "size": (1280, 720)})
+        self.assertIn("libx264", cmd)
+        self.assertEqual(cmd[cmd.index("-b:v") + 1], "2000000")
+        self.assertIn("30", cmd)
+        graph = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("scale=1280:720", graph)
 
     def test_gif_size(self):
         self.assertEqual(export.gif_size((3440, 1440), "medium"), (600, 250))
