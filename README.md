@@ -27,6 +27,23 @@ Ubuntu (GNOME). Brought to you by [@gitcotech](https://t.me/gitcotech).
 Everything runs on your computer. Nothing is uploaded. (Once a day Framewise
 asks GitHub whether a new version is out; Settings → About turns that off.)
 
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/screenshots/home.jpg" alt="The Framewise home window with its five tools and their shortcuts"><p align="center">Five tools, one shortcut each</p></td>
+    <td width="50%"><img src="docs/media/screenshots/record.jpg" alt="The record window: area, window or screen, audio, camera and countdown"><p align="center">Record an area, a window or the screen</p></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/screenshots/editor.jpg" alt="The recording editor with the style panel open: backgrounds, margin and corner roundness"><p align="center">Edit: backgrounds, rounded corners, auto zoom</p></td>
+    <td><img src="docs/media/screenshots/screenshot-editor.jpg" alt="The screenshot editor with drawing tools and the background panel"><p align="center">Mark up screenshots</p></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/screenshots/clipboard.jpg" alt="Clipboard history with text, pictures and files"><p align="center">Clipboard history, with search and pins</p></td>
+    <td><img src="docs/media/screenshots/settings.jpg" alt="Framewise settings: recording folder, quality, frame rate and audio"><p align="center">Settings</p></td>
+  </tr>
+</table>
+
 ## Install
 
 Needs Ubuntu 24.04 or newer with GNOME (made and tested on Ubuntu 26.04,
