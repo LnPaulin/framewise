@@ -75,6 +75,7 @@ class Session:
 
     def begin(self, mode):
         self.phase = self.PREPARING
+        self.window_size = None
         self.app.hold()
         kind = "window" if mode == "window" else "monitor"
         # The editor draws the pointer itself (smooth, with click rings) when
@@ -109,14 +110,20 @@ class Session:
         elif mode == "window":
             # The size GNOME reports for a window can differ from the picture it
             # sends: take the size from a real frame, or the video comes out stretched.
-            frame.grab(cap, self._window_ready)
+            frame.grab(cap, self._window_ready, with_crop=True)
         else:
             self._prepare(window_mode=False)
 
-    def _window_ready(self, still):
+    def _window_ready(self, still, crop):
         if self.phase != self.PREPARING:
             return
-        size = (still.get_width(), still.get_height()) if still is not None else None
+        frame_size = (still.get_width(), still.get_height()) if still is not None else None
+        stream = (self.capture.stream.width, self.capture.stream.height)
+        # The window's own size: from GNOME's crop note when there is one.
+        size = (crop[2], crop[3]) if crop and crop[2] > 16 and crop[3] > 16 else frame_size
+        print(f"Framewise window recording: reported {stream[0]}x{stream[1]}, frame "
+              f"{frame_size}, crop note {crop}, recording at {size}", file=sys.stderr, flush=True)
+        self.window_size = size
         self._prepare(window_mode=True, window_size=size)
 
     def _show_selector(self, still):
@@ -194,7 +201,8 @@ class Session:
                                  fw * g.width, fh * g.height)
         elif window_mode:
             s = self.capture.stream
-            self.shell.show_window_border(s.width, s.height)
+            w, h = getattr(self, "window_size", None) or (s.width, s.height)
+            self.shell.show_window_border(w, h)
         else:
             # Whole screen: the border sits on the screen's edges and is
             # captured, so the saved video leaves out that thin strip.
