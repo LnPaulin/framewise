@@ -34,20 +34,24 @@ class Player:
         vw, vh = video_size
         cx, cy, cw, ch = crop_px if crop_px else (0, 0, vw, vh)
         scale = min(1.0, PREVIEW_MAX_WIDTH / cw)
-        pw = max(2, int(vw * scale) & ~1)
-        ph = max(2, int(vh * scale) & ~1)
+        # The preview width is a multiple of 32: the graphics chip's converter
+        # hands back frames GTK can't show (a black preview) for other widths,
+        # e.g. an 854-pixel-wide window recording. The height keeps the shape.
+        pw = max(32, int(vw * scale) // 32 * 32)
+        ph = max(2, round(pw * vh / vw) & ~1)
+        sx, sy = pw / vw, ph / vh
         crop = ""
         if crop_px:
-            left, top = int(cx * scale), int(cy * scale)
-            right = max(0, pw - left - int(cw * scale))
-            bottom = max(0, ph - top - int(ch * scale))
+            left, top = int(cx * sx), int(cy * sy)
+            right = max(0, pw - left - int(cw * sx))
+            bottom = max(0, ph - top - int(ch * sy))
             crop = f"videocrop left={left} top={top} right={right} bottom={bottom} ! "
 
         # Every branch is described up front (demux pads link when they
         # appear), so the mixer has all its inputs before it starts.
         desc = (f'filesrc location="{take}" ! matroskademux name=demux '
                 f"demux.video_0 ! queue max-size-time=1000000000 ! h264parse ! {gpu.h264_decoder()} ! "
-                f"{gpu.convert()} ! video/x-raw,format=BGRA,width={pw},height={ph} ! {crop}"
+                f"{gpu.convert()} ! video/x-raw,format=BGRA,width={pw},height={ph},pixel-aspect-ratio=1/1 ! {crop}"
                 f"gtk4paintablesink name=view ")
         if self.track_names:
             desc += "audiomixer name=mix ! audioconvert ! audioresample ! autoaudiosink "
