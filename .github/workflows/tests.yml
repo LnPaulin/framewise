@@ -1,0 +1,33 @@
+# Runs Framewise's tests on a clean Ubuntu 24.04 (GNOME 46 generation) at every
+# change, with the same system packages the .deb depends on.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-gi-cairo python3-cairo python3-numpy python3-opencv \
+            gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+            gir1.2-pango-1.0 gir1.2-gdkpixbuf-2.0 \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-libav ffmpeg tesseract-ocr tesseract-ocr-eng fonts-dejavu-core
+
+      - name: Run tests
+        working-directory: app
+        run: python3 -m unittest $(ls tests/test_*.py | sed 's#/#.#; s#\.py$##') -v
