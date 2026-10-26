@@ -596,8 +596,14 @@ class StyleMixin:
 
     def _texture(self, path):
         key = str(path)
-        if key not in self._textures:
+        if key in self._textures:
+            self._textures[key] = self._textures.pop(key)      # most recently used last
+        else:
             self._textures[key] = Gdk.Texture.new_from_filename(key)
+            # A slider drag makes a background per step (~20 MB each when large):
+            # keep only the recent ones.
+            while len(self._textures) > 12:
+                self._textures.pop(next(iter(self._textures)))
         return self._textures[key]
 
     def _pointer_scene(self):
@@ -621,36 +627,68 @@ class StyleMixin:
                 "px": px, "rings_on": p["rings"]}
 
     def _update_scene(self):
-        """Recomputes the finished frame and the zoom, shortly after changes stop."""
+        """Shows a style change at once, then the exact picture once it settles.
+
+        At once: the new layout (margin, corners, shape) with the background
+        and captions already made, stretched to the new size, so a slider
+        follows the mouse. Then, shortly after changes stop, the exact
+        background and captions are drawn in a background thread (a large
+        or blurred background takes a while) and swapped in."""
+        lay = compose.layout(*self.src_size, self.doc["style"])
+        if self.picture.layout is not None:
+            bg = self.picture.background if lay["background"] else None
+            self.picture.set_scene(lay, self.src_size, bg, self.picture.overlays, self.doc["blurs"])
         if self._scene_timer:
             GLib.source_remove(self._scene_timer)
+        self._scene_timer = GLib.timeout_add(150, self._render_scene)
 
-        def compute():
-            self._scene_timer = None
-            lay = compose.layout(*self.src_size, self.doc["style"])
+    def _render_scene(self):
+        self._scene_timer = None
+        if getattr(self, "_scene_busy", False):
+            self._scene_again = True          # one job at a time: redo when it ends
+            return False
+        self._scene_busy, self._scene_again = True, False
+        doc = em.clone(self.doc)
+        lay = compose.layout(*self.src_size, doc["style"])
+        out_dir, take_dir = self.take_dir / "render", self.take_dir
+
+        def work():
             try:
-                assets = export.render_assets(self.doc, lay, self.take_dir / "render", self.take_dir)
+                assets = export.render_assets(doc, lay, out_dir, take_dir)
             except Exception as e:  # a broken picture must not break the editor
                 print("render failed:", e, flush=True)
                 assets = {"background": None, "texts": [], "images": []}
-            bg = self._texture(assets["background"]) if assets["background"] else None
-            overlays = [(item, self._texture(path), place, 1.0, compose.TEXT_FADE)
-                        for item, path, place in assets["texts"]]
-            overlays += [(item, self._texture(path), place, item["opacity"], compose.IMAGE_FADE)
-                         for item, path, place in assets["images"]]
-            self.picture.set_scene(lay, self.src_size, bg, overlays, self.doc["blurs"])
-            self.picture.set_pointer(self._pointer_scene())
-            z = self.doc["zoom"]
-            if z["enabled"] and z["segments"]:
-                sx, sy, sw, sh = lay["source"]
-                samples = [(t, (x - sx) / sw, (y - sy) / sh, *rest)
-                           for t, x, y, *rest in self.area_samples]
-                typing = [(t, (x - sx) / sw, (y - sy) / sh) for t, x, y in self.typing]
-                views = motion.viewports(export.segments_in_base(z["segments"], lay["source"]),
-                                         z["amount"], samples, self.duration, self.fps, typing=typing)
-                self.picture.set_views(views, self.fps)
-            else:
-                self.picture.set_views(None, self.fps)
-            return False
+            GLib.idle_add(self._scene_ready, doc, lay, assets)
 
-        self._scene_timer = GLib.timeout_add(60, compute)
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+        return False
+
+    def _scene_ready(self, doc, lay, assets):
+        self._scene_busy = False
+        if getattr(self, "_closing", False):
+            return False
+        if self._scene_again or doc["style"] != self.doc["style"] or doc["texts"] != self.doc["texts"] \
+                or doc["images"] != self.doc["images"]:
+            # Changed again meanwhile: draw the newest instead of showing this.
+            self._scene_timer = GLib.timeout_add(10, self._render_scene)
+            return False
+        bg = self._texture(assets["background"]) if assets["background"] else None
+        overlays = [(item, self._texture(path), place, 1.0, compose.TEXT_FADE)
+                    for item, path, place in assets["texts"]]
+        overlays += [(item, self._texture(path), place, item["opacity"], compose.IMAGE_FADE)
+                     for item, path, place in assets["images"]]
+        self.picture.set_scene(lay, self.src_size, bg, overlays, self.doc["blurs"])
+        self.picture.set_pointer(self._pointer_scene())
+        z = self.doc["zoom"]
+        if z["enabled"] and z["segments"]:
+            sx, sy, sw, sh = lay["source"]
+            samples = [(t, (x - sx) / sw, (y - sy) / sh, *rest)
+                       for t, x, y, *rest in self.area_samples]
+            typing = [(t, (x - sx) / sw, (y - sy) / sh) for t, x, y in self.typing]
+            views = motion.viewports(export.segments_in_base(z["segments"], lay["source"]),
+                                     z["amount"], samples, self.duration, self.fps, typing=typing)
+            self.picture.set_views(views, self.fps)
+        else:
+            self.picture.set_views(None, self.fps)
+        return False
