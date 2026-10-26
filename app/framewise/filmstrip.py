@@ -44,6 +44,8 @@ SEAM = _rgba(1.0, 0.62, 0.04, 0.95)          # orange seams where cuts were made
 SUGGEST = {"silence": _rgba(1.0, 0.75, 0.1, 0.42),    # suggested cuts: pauses
            "filler": _rgba(0.62, 0.36, 1.0, 0.55)}    # suggested cuts: um, uh, hmm
 WHITE = _rgba(1, 1, 1)
+SPEEDUP = _rgba(0.2, 0.75, 0.85, 0.38)        # sped-up idle moments (teal)
+SPEEDUP_EDGE = _rgba(0.2, 0.75, 0.85, 0.95)
 BG = _rgba(0.12, 0.12, 0.14)
 
 
@@ -63,6 +65,7 @@ class Filmstrip(Gtk.Widget):
         self.suggestions = {}     # kind -> [(a, b)] in recording time, e.g. pauses to cut
         self.on_scrub = self.on_trim = self.on_select = self.on_restore = None
         self.on_suggestion = None  # (kind, (a, b)) when a highlighted part is clicked
+        self.on_speed_restore = None  # (index) when a sped-up part is clicked
         self._drag = None
 
         drag = Gtk.GestureDrag()
@@ -119,7 +122,29 @@ class Filmstrip(Gtk.Widget):
                 return i
         return None
 
+    def _speedup_at(self, x):
+        for i, (a, b, _rate) in enumerate((self.doc or {}).get("speedups") or []):
+            if self._x(a) <= x <= self._x(b):
+                return i
+        return None
+
     def _suggestion_at(self, x):
+        # Sped-up idle moments: a tinted band with its speed.
+        for a, b, rate in self.doc.get("speedups") or []:
+            xa, xb = self._x(a), self._x(b)
+            if xb - xa < 1:
+                continue
+            snap.append_color(SPEEDUP, _rect(xa, top, xb - xa, strip_h))
+            snap.append_color(SPEEDUP_EDGE, _rect(xa, top + strip_h - 3, xb - xa, 3))
+            if xb - xa > 22:
+                layout = self.create_pango_layout(f"{rate}×")
+                point = Graphene.Point()
+                point.init(xa + 4, top + 2)
+                snap.save()
+                snap.translate(point)
+                snap.append_layout(layout, WHITE)
+                snap.restore()
+
         for kind, ranges in self.suggestions.items():
             for a, b in ranges:
                 if self._x(a) - 2 <= x <= self._x(b) + 2:
@@ -142,6 +167,10 @@ class Filmstrip(Gtk.Widget):
             kind = self._suggestion_at(x)[0]
             tip = ("Click to cut this filler word" if kind == "filler"
                    else "Click to cut this pause")
+        elif self._speedup_at(x) is not None:
+            name = "pointer"
+            rate = self.doc["speedups"][self._speedup_at(x)][2]
+            tip = f"Idle moment, played {rate}× faster. Click to play it at normal speed"
         else:
             name = "text"
         if name != "pointer":
@@ -210,10 +239,12 @@ class Filmstrip(Gtk.Widget):
             self.selection = (a, b) if b - a >= em.MIN_CUT else None
             if self.on_select:
                 self.on_select(self.selection)
-        elif kind == "scrub" and abs(dx) < 4 and self.on_suggestion:
-            hit = self._suggestion_at(self._drag[1])
+        elif kind == "scrub" and abs(dx) < 4:
+            hit = self._suggestion_at(self._drag[1]) if self.on_suggestion else None
             if hit:
                 self.on_suggestion(*hit)
+            elif self.on_speed_restore and self._speedup_at(self._drag[1]) is not None:
+                self.on_speed_restore(self._speedup_at(self._drag[1]))
         elif kind == "seam" and abs(dx) < 4 and self.on_restore:
             self.on_restore(self._drag[1])
         self._drag = None
@@ -258,6 +289,22 @@ class Filmstrip(Gtk.Widget):
         xs, xe = self._x(start), self._x(end)
         snap.append_color(SHADE, _rect(x0, top, xs - x0, strip_h))
         snap.append_color(SHADE, _rect(xe, top, x1 - xe, strip_h))
+
+        # Sped-up idle moments: a tinted band with its speed.
+        for a, b, rate in self.doc.get("speedups") or []:
+            xa, xb = self._x(a), self._x(b)
+            if xb - xa < 1:
+                continue
+            snap.append_color(SPEEDUP, _rect(xa, top, xb - xa, strip_h))
+            snap.append_color(SPEEDUP_EDGE, _rect(xa, top + strip_h - 3, xb - xa, 3))
+            if xb - xa > 22:
+                layout = self.create_pango_layout(f"{rate}×")
+                point = Graphene.Point()
+                point.init(xa + 4, top + 2)
+                snap.save()
+                snap.translate(point)
+                snap.append_layout(layout, WHITE)
+                snap.restore()
 
         for kind, ranges in self.suggestions.items():
             for a, b in ranges:

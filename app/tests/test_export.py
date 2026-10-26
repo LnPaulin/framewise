@@ -115,6 +115,25 @@ class ExportOptionTests(unittest.TestCase):
         self.assertEqual(export.gif_size((400, 300), "large"), (400, 300))
 
 
+class SpeedupExportTests(unittest.TestCase):
+    """Idle moments: every Nth frame kept, the sound shortened to match."""
+
+    def test_speedup_select_and_tempo(self):
+        doc = em_doc(12.0, speedups=[[4.0, 8.0, 4]])
+        cmd = export.build_edit_command("t.mkv", "o.mp4", doc, ["mic"], fps=60, hw=False)
+        graph = cmd[cmd.index("-filter_complex") + 1]
+        self.assertIn("gte(t,4.0000)*lt(t,8.0000)*not(mod(n,4))", graph)
+        self.assertIn("gte(t,0.0000)*lt(t,4.0000)+", graph)      # normal parts keep every frame
+        self.assertIn("atrim=start=4.0000:end=8.0000,asetpts=PTS-STARTPTS,atempo=2,atempo=2", graph)
+
+
+def em_doc(duration, speedups=()):
+    from framewise import edit_model as em
+    d = em.new_document(duration)
+    d["speedups"] = [list(s) for s in speedups]
+    return em.normalize(d, duration)
+
+
 class SyncTests(unittest.TestCase):
     def test_shift_filters(self):
         from framewise import edit_model as em

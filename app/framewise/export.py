@@ -557,10 +557,15 @@ def build_edit_command(take, dest, doc, names, crop=None, fps=60, qp=16, mic_cle
     size = out.get("size")
     scale = f",{_scaler(hw, size[0], size[1])}" if size else ""
     rate = fps * speed
-    segments = em.kept_segments(doc)
-    n = len(segments)
+    # Kept parts with their rate: a sped-up part (idle moment) keeps every
+    # Nth frame, so after re-timing it plays N times faster. Zoom, pointer
+    # and overlays are applied before this, in recording time, so they stay
+    # in step.
+    kept = em.pieces(doc)
+    n = len(kept)
     # [start, end): including the end frame would add one frame per part.
-    sel = "+".join(f"gte(t,{a:.4f})*lt(t,{b:.4f})" for a, b in segments)
+    sel = "+".join(f"gte(t,{a:.4f})*lt(t,{b:.4f})" + (f"*not(mod(n,{r}))" if r > 1 else "")
+                   for a, b, r in kept)
     extra = []
     if plan:
         first = 2 if mic_clean else 1
@@ -589,8 +594,10 @@ def build_edit_command(take, dest, doc, names, crop=None, fps=60, qp=16, mic_cle
         # system sound, delayed for the speakers) keeps its place, as silence.
         pre = "aresample=async=1:first_pts=0" + _sync_shift(doc, name)
         chain = f"{src}{pre},asplit={n}{parts};" if n > 1 else f"{src}{pre}[s{i}_0];"
-        for k, (a, b) in enumerate(segments):
-            chain += f"[s{i}_{k}]atrim=start={a:.4f}:end={b:.4f},asetpts=PTS-STARTPTS[t{i}_{k}];"
+        for k, (a, b, r) in enumerate(kept):
+            # A sped-up part's sound is shortened to match (it's quiet: an idle moment).
+            chain += (f"[s{i}_{k}]atrim=start={a:.4f}:end={b:.4f},asetpts=PTS-STARTPTS"
+                      f"{atempo_chain(r)}[t{i}_{k}];")
         joined = "".join(f"[t{i}_{k}]" for k in range(n))
         chain += f"{joined}concat=n={n}:v=0:a=1{tempo},volume={gain:.3f}[a{i}]"
         chains.append(chain)

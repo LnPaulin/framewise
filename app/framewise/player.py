@@ -30,6 +30,7 @@ class Player:
         self.volumes = {}
         self.playing = False
         self._timer = None
+        self.rate = 1                 # playing faster inside a sped-up part (idle moment)
 
         vw, vh = video_size
         cx, cy, cw, ch = crop_px if crop_px else (0, 0, vw, vh)
@@ -118,8 +119,15 @@ class Player:
         self.pipeline.seek_simple(Gst.Format.TIME,
                                   Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
                                   int(max(0.0, t) * Gst.SECOND))
+        self.rate = 1                 # a plain seek plays at normal speed again
         if self.on_position:
             self.on_position(t)
+
+    def _set_rate(self, rate, t):
+        """Plays on from t at `rate` (a sped-up part plays as it will be saved)."""
+        self.pipeline.seek(float(rate), Gst.Format.TIME, Gst.SeekFlags.FLUSH | Gst.SeekFlags.ACCURATE,
+                           Gst.SeekType.SET, int(max(0.0, t) * Gst.SECOND), Gst.SeekType.NONE, 0)
+        self.rate = rate
 
     def play(self):
         if self.doc:
@@ -162,6 +170,9 @@ class Player:
                 # Jump over the cut, so the preview plays exactly what is kept.
                 self.seek(self.doc["cuts"][i][1])
                 return True
+            rate = em.rate_at(self.doc, t)
+            if rate != self.rate:
+                self._set_rate(rate, t)
         if self.on_position:
             self.on_position(t)
         return True

@@ -12,6 +12,8 @@ import json
 
 MIN_TRIM = 0.2   # the kept part is never shorter than this
 MIN_CUT = 0.1    # shorter cuts are dropped as accidental
+MIN_SPEEDUP = 0.3   # shorter sped-up parts are dropped
+SPEEDUP_RATES = (2, 4, 8)   # whole numbers: the export keeps every Nth frame
 
 
 def new_document(duration):
@@ -19,6 +21,9 @@ def new_document(duration):
         "version": 1,
         "trim": [0.0, float(duration)],
         "cuts": [],                      # [[start, end], ...] in recording time
+        # Parts played faster (idle moments): [[start, end, rate], ...] in
+        # recording time; rate is one of SPEEDUP_RATES. A cut wins over them.
+        "speedups": [],
         "gain": {"system": 1.0, "mic": 1.0},
         "muted": {"system": False, "mic": False},
         # Seconds the system sound is moved later (+) or earlier (-) against
@@ -133,6 +138,23 @@ def normalize(doc, duration):
         else:
             cuts.append([a, b])
     doc["cuts"] = cuts
+    speedups = []
+    for item in sorted(doc.get("speedups") or [], key=lambda x: x[0]):
+        try:
+            a, b, rate = float(item[0]), float(item[1]), int(item[2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        rate = min(SPEEDUP_RATES, key=lambda r: abs(r - rate))
+        a, b = max(0.0, min(a, b)), min(duration, max(a, b))
+        if speedups and a < speedups[-1][1]:
+            prev = speedups[-1]
+            if prev[2] == rate:          # overlapping, same speed: one part
+                prev[1] = max(prev[1], b)
+                continue
+            a = prev[1]                  # different speeds: the earlier one keeps its part
+        if b - a >= MIN_SPEEDUP:
+            speedups.append([round(a, 4), round(b, 4), rate])
+    doc["speedups"] = speedups
     # Never let cuts remove everything that's left.
     while cuts and finished_duration(doc) < MIN_TRIM:
         cuts.pop()
@@ -216,9 +238,45 @@ def kept_segments(doc):
     return segments
 
 
+def pieces(doc):
+    """The kept parts with their playback rate: [(start, end, rate), ...].
+    Kept segments are split where sped-up parts begin and end."""
+    out = []
+    speedups = doc.get("speedups") or []
+    for a, b in kept_segments(doc):
+        pos = a
+        for sa, sb, rate in speedups:
+            if sb <= pos or sa >= b:
+                continue
+            if sa > pos:
+                out.append((pos, sa, 1))
+            out.append((max(pos, sa), min(b, sb), rate))
+            pos = min(b, sb)
+        if b > pos:
+            out.append((pos, b, 1))
+    return [p for p in out if p[1] - p[0] > 1e-6]
+
+
+def rate_at(doc, t):
+    """Playback rate at recording time t (1 outside sped-up parts)."""
+    for a, b, rate in doc.get("speedups") or []:
+        if a <= t < b:
+            return rate
+    return 1
+
+
+def speedup_at(doc, t):
+    """Index of the sped-up part containing recording time t, or None."""
+    for i, (a, b, _rate) in enumerate(doc.get("speedups") or []):
+        if a <= t < b:
+            return i
+    return None
+
+
 def finished_duration(doc):
-    """Length of the edit at 1x, the clock the timeline and preview use."""
-    return sum(b - a for a, b in kept_segments(doc))
+    """Length of the edit (sped-up parts count at their speed), before the
+    export speed: the clock the time display uses."""
+    return sum((b - a) / rate for a, b, rate in pieces(doc))
 
 
 def output_duration(doc):
@@ -229,26 +287,27 @@ def output_duration(doc):
 def to_finished(doc, t):
     """Recording time -> finished-video time, or None if t was cut out."""
     elapsed = 0.0
-    for a, b in kept_segments(doc):
+    for a, b, rate in pieces(doc):
         if t < a:
             return None
         if t <= b:
-            return elapsed + (t - a)
-        elapsed += b - a
+            return elapsed + (t - a) / rate
+        elapsed += (b - a) / rate
     return None
 
 
 def to_recording(doc, f):
     """Finished-video time -> recording time (clamped to the kept part)."""
-    segments = kept_segments(doc)
-    if not segments:
+    parts = pieces(doc)
+    if not parts:
         return doc["trim"][0]
     elapsed = 0.0
-    for a, b in segments:
-        if f <= elapsed + (b - a):
-            return a + max(0.0, f - elapsed)
-        elapsed += b - a
-    return segments[-1][1]
+    for a, b, rate in parts:
+        length = (b - a) / rate
+        if f <= elapsed + length:
+            return a + max(0.0, f - elapsed) * rate
+        elapsed += length
+    return parts[-1][1]
 
 
 def snap_to_kept(doc, t):
@@ -275,6 +334,7 @@ def cut_at(doc, t):
 def is_unedited(doc, duration):
     """True when saving the recording as is would give the same video."""
     return (doc["trim"][0] <= 0.01 and doc["trim"][1] >= duration - 0.01 and not doc["cuts"]
+            and not doc.get("speedups")
             and not has_zoom(doc) and not (doc.get("denoise") or {}).get("mic")
             and not needs_compose(doc)
             and normalize_export(doc.get("export"))["speed"] == 1.0

@@ -79,8 +79,8 @@ def find_silences(db, threshold, min_pause=0.8, keep=0.2, within=None):
     return ranges
 
 
-def analyse_async(take, track_index, on_done, track_count=2):
-    """Measures the recording in the background. on_done(Analysis or None).
+def analyse(take, track_index, track_count=2):
+    """Measures the recording's loudness (blocking). Analysis or None.
 
     track_index: which audio track to listen to, or None to mix them all.
     """
@@ -94,21 +94,23 @@ def analyse_async(take, track_index, on_done, track_count=2):
         args = ["-map", f"0:a:{track_index}", "-af", pad]
     cmd = ["ffmpeg", "-hide_banner", "-v", "error", "-i", str(take), *args,
            "-ac", "1", "-ar", str(RATE), "-f", "s16le", "-"]
+    try:
+        raw = subprocess.run(cmd, capture_output=True, timeout=600).stdout
+        samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+        step = int(RATE * WINDOW)
+        count = len(samples) // step
+        if not count:
+            return None
+        frames = samples[: count * step].reshape(count, step)
+        rms = np.sqrt(np.mean(frames ** 2, axis=1))
+        return Analysis(20 * np.log10(np.maximum(rms, 1e-6)))
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
 
+
+def analyse_async(take, track_index, on_done, track_count=2):
+    """Measures the recording in the background. on_done(Analysis or None)."""
     def work():
-        result = None
-        try:
-            raw = subprocess.run(cmd, capture_output=True, timeout=600).stdout
-            samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-            step = int(RATE * WINDOW)
-            count = len(samples) // step
-            if count:
-                frames = samples[: count * step].reshape(count, step)
-                rms = np.sqrt(np.mean(frames ** 2, axis=1))
-                db = 20 * np.log10(np.maximum(rms, 1e-6))
-                result = Analysis(db)
-        except (OSError, subprocess.SubprocessError, ValueError):
-            result = None
-        GLib.idle_add(on_done, result)
+        GLib.idle_add(on_done, analyse(take, track_index, track_count))
 
     threading.Thread(target=work, daemon=True).start()

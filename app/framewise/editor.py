@@ -24,7 +24,7 @@ from . import silence  # noqa: E402
 from . import speech  # noqa: E402
 from . import motion  # noqa: E402
 from .filmstrip import Filmstrip, ZoomLane, make_thumbnails  # noqa: E402
-from .editor_export import ExportMixin, copy_file_to_clipboard  # noqa: E402
+from .editor_export import ExportMixin, copy_file_to_clipboard, format_length  # noqa: E402
 from .editor_style import StyleMixin  # noqa: E402
 from .zoomview import ZoomView  # noqa: E402
 from .player import Player  # noqa: E402
@@ -206,6 +206,7 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         self.strip.on_trim = self._on_trim
         self.strip.on_select = self._on_select
         self.strip.on_restore = self.restore_cut
+        self.strip.on_speed_restore = self.restore_speed
         self.strip.on_suggestion = self._cut_suggestion
         hint = Gtk.Label(label="Drag to scrub  ·  Drag the red handles to trim  ·  "
                                "Shift-drag to cut  ·  Click an orange marker "
@@ -286,6 +287,8 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         self.silence_found = []
         pop_body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=12,
                            margin_bottom=12, margin_start=12, margin_end=12, width_request=300)
+        self._build_idle_section(pop_body)
+        pop_body.append(Gtk.Separator(margin_top=6, margin_bottom=6))
         pop_body.append(Gtk.Label(label="Silence removal", xalign=0, css_classes=["heading"]))
         pop_body.append(Gtk.Label(
             label="Finds the pauses where nobody is speaking. They're shown in yellow on the "
@@ -324,11 +327,15 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         pop_body.append(Gtk.Separator(margin_top=6, margin_bottom=6))
         self._build_filler_section(pop_body)
 
-        popover = Gtk.Popover(child=pop_body)
+        # Scrollable: with idle moments, silences and filler words it's tall.
+        scroller = Gtk.ScrolledWindow(child=pop_body, hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                      propagate_natural_height=True, propagate_natural_width=True,
+                                      max_content_height=640)
+        popover = Gtk.Popover(child=scroller)
         popover.connect("show", lambda *_: self._open_cleanup())
         self.silence_popover = popover
-        button = Gtk.MenuButton(popover=popover, tooltip_text="Remove silence and filler words",
-                                sensitive=bool(self.tracks))
+        button = Gtk.MenuButton(popover=popover,
+                                tooltip_text="Speed up idle moments, remove silence and filler words")
         button.set_child(self._icon_label("edit-clear-all-symbolic", "Cleanup"))
         return button
 
@@ -604,15 +611,32 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         return self.suggest_bar
 
     def _open_cleanup(self):
+        self._open_idle()
+        if not self.tracks:
+            # No sound to listen to: only idle moments apply.
+            self.silence_status.set_label("This recording has no sound.")
+            self.silence_apply.set_sensitive(False)
+            for b in self.silence_levels.values():
+                b.set_sensitive(False)
+            self._show_fillers()
+            return
         self.suggest_visible = {"silence": True, "filler": True}
         self._open_silences()
         self._show_fillers()
         self._update_suggestion_bar()
 
+    def _not_sped_up(self, ranges):
+        """Marks inside a sped-up part are already handled: they aren't shown."""
+        speedups = self.doc.get("speedups") or []
+
+        def inside(a, b):
+            return sum(max(0.0, min(b, y) - max(a, x)) for x, y, _r in speedups) >= 0.5 * (b - a)
+        return [r for r in ranges if not inside(*r)]
+
     def _update_suggestion_bar(self):
         parts = []
-        silences = self.silence_found if self.suggest_visible["silence"] else []
-        fillers = self.filler_found if self.suggest_visible["filler"] else []
+        silences = self._not_sped_up(self.silence_found) if self.suggest_visible["silence"] else []
+        fillers = self._not_sped_up(self.filler_found) if self.suggest_visible["filler"] else []
         self.strip.set_suggestions(silences, "silence")
         self.strip.set_suggestions(fillers, "filler")
         if fillers:
@@ -644,9 +668,9 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
     def _cut_all_suggestions(self):
         ranges = []
         if self.suggest_visible["silence"]:
-            ranges += self.silence_found
+            ranges += self._not_sped_up(self.silence_found)
         if self.suggest_visible["filler"]:
-            ranges += self.filler_found
+            ranges += self._not_sped_up(self.filler_found)
         if not ranges:
             return
         before = em.finished_duration(self.doc)
@@ -666,6 +690,129 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         if self.silence_analysis is not None:
             self._update_silences()
         self._show_fillers()
+
+    # ---- idle moments ---------------------------------------------------------------
+
+    def _build_idle_section(self, box):
+        self.idle_activity = None        # per-frame activity, once measured
+        self.idle_found = []
+        self.idle_busy = False
+        box.append(Gtk.Label(label="Idle moments", xalign=0, css_classes=["heading"]))
+        box.append(Gtk.Label(
+            label="Speeds up the moments where nothing happens: no voice, no sound, no "
+                  "typing and nothing changing on screen. Click a sped-up part on the "
+                  "timeline to play it at normal speed again.",
+            xalign=0, wrap=True, max_width_chars=40, css_classes=["dim-label", "caption"]))
+        speeds = Gtk.Box(css_classes=["linked"], homogeneous=True)
+        self.idle_speeds = {}
+        first = None
+        saved = settings.get("idle_speed") or 4
+        for value, label in ((2, "2×"), (4, "4×"), (8, "8×"), (0, "Cut")):
+            b = Gtk.ToggleButton(label=label, tooltip_text="Remove them" if not value
+                                 else f"Play them {value} times faster")
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.set_active(value == saved)
+            b.connect("toggled", lambda btn, v=value: btn.get_active() and (
+                settings.set("idle_speed", v), self._update_idle()))
+            speeds.append(b)
+            self.idle_speeds[value] = b
+        box.append(speeds)
+        self.idle_status = Gtk.Label(xalign=0, wrap=True, max_width_chars=40, css_classes=["dim-label"])
+        box.append(self.idle_status)
+        self.idle_apply = Gtk.Button(label="Speed Up All", css_classes=["suggested-action", "pill"],
+                                     sensitive=False)
+        self.idle_apply.connect("clicked", lambda *_: self._apply_idle())
+        box.append(self.idle_apply)
+
+    def _idle_speed(self):
+        return next((v for v, b in self.idle_speeds.items() if b.get_active()), 4)
+
+    def _open_idle(self):
+        if self.idle_activity is not None:
+            self._update_idle()
+            return
+        if self.idle_busy:
+            return
+        self.idle_busy = True
+        self.idle_status.set_label("Looking for idle moments…")
+        self.idle_apply.set_sensitive(False)
+        from . import idle
+
+        def done(activity):
+            self.idle_busy = False
+            if getattr(self, "_closing", False):
+                return
+            if activity is None:
+                self.idle_status.set_label("The recording couldn't be analyzed.")
+                return
+            self.idle_activity = activity
+            self._update_idle()
+
+        idle.analyse_async(self.take, self.take_dir, self.duration, self.crop_px, self.tracks, done)
+
+    def _update_idle(self):
+        """The idle parts not already sped up or cut, for the chosen speed."""
+        if self.idle_activity is None:
+            return
+        from . import idle
+        parts = idle.idle_parts(self.idle_activity, within=tuple(self.doc["trim"]))
+        handled = [(a, b) for a, b, _r in self.doc["speedups"]] + [tuple(c) for c in self.doc["cuts"]]
+
+        def covered(a, b):
+            done = sum(max(0.0, min(b, y) - max(a, x)) for x, y in handled)
+            return done >= 0.5 * (b - a)
+        self.idle_found = [p for p in parts if not covered(*p)]
+        speed = self._idle_speed()
+        total = sum(b - a for a, b in self.idle_found)
+        saved = total if not speed else total * (1 - 1 / speed)
+        n = len(self.idle_found)
+        if not n:
+            self.idle_status.set_label("No idle moments found." if not handled
+                                       else "No other idle moments found.")
+        else:
+            self.idle_status.set_label(f"{n} idle moment{'s' if n != 1 else ''} found · "
+                                       f"{format_length(total)} → {format_length(total - saved)}")
+        self.idle_apply.set_label("Cut All" if not speed else "Speed Up All")
+        for css in ("suggested-action", "destructive-action"):
+            self.idle_apply.remove_css_class(css)
+        self.idle_apply.add_css_class("destructive-action" if not speed else "suggested-action")
+        self.idle_apply.set_sensitive(bool(n))
+
+    def _apply_idle(self):
+        if not self.idle_found:
+            return
+        speed = self._idle_speed()
+        before = em.finished_duration(self.doc)
+        doc = em.clone(self.doc)
+        if speed:
+            doc["speedups"].extend([[a, b, speed] for a, b in self.idle_found])
+        else:
+            doc["cuts"].extend([[a, b] for a, b in self.idle_found])
+        count = len(self.idle_found)
+        self.silence_popover.popdown()
+        self._commit(doc)
+        saved = before - em.finished_duration(self.doc)
+        what = f"Sped up {count} idle moment{'s' if count != 1 else ''}" if speed \
+            else f"Cut {count} idle moment{'s' if count != 1 else ''}"
+        toast = Adw.Toast(title=f"{what} · {saved:.1f} s shorter", button_label="Undo", timeout=6)
+        toast.connect("button-clicked", lambda *_: self.undo())
+        self.toasts.add_toast(toast)
+
+    def restore_speed(self, index):
+        """A sped-up part plays at normal speed again (clicked on the timeline)."""
+        if index is None or index >= len(self.doc["speedups"]):
+            return
+        a = self.doc["speedups"][index][0]
+        doc = em.clone(self.doc)
+        del doc["speedups"][index]
+        self._commit(doc)
+        self.player.seek(em.snap_to_kept(self.doc, a))
+        toast = Adw.Toast(title="Back to normal speed", button_label="Undo", timeout=4)
+        toast.connect("button-clicked", lambda *_: self.undo())
+        self.toasts.add_toast(toast)
 
     # ---- filler words ---------------------------------------------------------------
 
