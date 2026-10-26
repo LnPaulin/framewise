@@ -149,7 +149,7 @@ class Session:
             microphone_device=settings.get("microphone_device"), window_mode=window_mode,
             window_size=window_size)
         self.recorder.on_finished = self._on_recorded
-        self.recorder.on_error = lambda m: self.app.notify("Recording error", m)
+        self.recorder.on_error = self._on_recorder_error
         self.recorder.on_low_disk = lambda: self.app.notify(
             "Recording stopped", "Disk space is almost full.")
         self.recorder.on_mic_lost = lambda: self.app.notify(
@@ -182,6 +182,25 @@ class Session:
         else:
             # Let the chooser or selection layer disappear before the first frame.
             GLib.timeout_add(400, lambda: self._on_countdown(True) and False)
+
+    def _on_recorder_error(self, message):
+        self.app.notify("Recording error", message)
+        if self.phase == self.PREPARING:
+            # Failed before it began (e.g. during the countdown): take the
+            # countdown and border off the screen now and be ready again.
+            # The recorder stops itself; nothing was recorded.
+            if self.recorder is not None:
+                self.recorder.on_finished = None
+            overlay, self.overlay = self.overlay, None
+            if overlay is not None:
+                overlay.on_done = lambda *_: None    # this cleans up here instead
+                overlay._close(False)
+            if self.use_shell:
+                self.shell.hide_area()
+            if self.take_dir:
+                import shutil
+                shutil.rmtree(self.take_dir, ignore_errors=True)
+            self._reset()
 
     def _take_info(self):
         return {"fps": settings.get("fps"), "quality": settings.get("quality"),

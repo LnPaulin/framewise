@@ -30,7 +30,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.9';
+const VERSION = '1.10';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -237,8 +237,17 @@ export default class FramewiseExtension extends Extension {
         this._appRunning = running;
         this._guard?.reset();
         this._clipHistory?.setRecording(running);
-        if (!running)
+        if (!running) {
             this._clipPicker?.close();
+            // The app has gone (quit or crashed): nothing it put on screen may
+            // stay behind (a countdown, recording controls, a border, a preview).
+            this.HideCountdown();
+            this.HideControls();
+            this.HideArea();
+            this.HideShot();
+            this._stopTrackTimer();
+            this._typing?.stop();
+        }
         this._syncIndicator();
     }
 

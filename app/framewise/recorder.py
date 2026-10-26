@@ -92,11 +92,16 @@ class Recorder:
         s = self.capture.stream
         qpi, qpp = QUALITY_QP.get(self.quality, QUALITY_QP["high"])
         size = ""
+        par = ""
         if self.window_mode:
             # A window can be resized while recording; keep the video size fixed,
-            # at the size of the window's real picture.
+            # at the size of the window's real picture. Square pixels: a picture
+            # that no longer fits gets black bars instead of being stretched.
+            # (Screens keep their own size, so they don't need this; with GNOME's
+            # screen feed it even made the converter fail to start.)
             w, h = self.window_size or (s.width, s.height)
             size = f",width={w - w % 2},height={h - h % 2}"
+            par = ",pixel-aspect-ratio=1/1"
         # On the graphics chip when it can (VA-API), in software otherwise.
         if gpu.gst_va():
             convert, memory = "vapostproc add-borders=true", "video/x-raw(memory:VAMemory)"
@@ -107,9 +112,7 @@ class Recorder:
             f"do-timestamp=true keepalive-time=100 on-disconnect=eos client-name=framewise ! "
             f"queue max-size-buffers=8 leaky=downstream ! "
             f"{convert} ! "
-            # Square pixels: a picture that doesn't fit (the window was resized)
-            # gets black bars instead of being stretched to the video's shape.
-            f"{memory},format=NV12{size},pixel-aspect-ratio=1/1 ! "
+            f"{memory},format=NV12{size}{par} ! "
             f"videorate ! capsfilter name=vgate caps=\"{memory},framerate={self.fps}/1\" ! "
             f"queue max-size-buffers=30 ! "
             f"{gpu.h264_encoder((qpi, qpp), self.fps * 2)} ! "
