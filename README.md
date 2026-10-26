@@ -76,11 +76,11 @@ Key fingerprint: `F69B 9995 8DF3 DE44 9A33 CABF 2B8D 94D1 92EA DC4F`.
 <details>
 <summary>Or with the .deb file</summary>
 
-Download `framewise_1.0.7_all.deb` from
+Download `framewise_1.0.8_all.deb` from
 [Releases](https://github.com/LnPaulin/framewise/releases/latest), then:
 
 ```bash
-sudo apt install ./framewise_1.0.7_all.deb
+sudo apt install ./framewise_1.0.8_all.deb
 ```
 
 Use `apt`, not `dpkg -i`, so what Framewise needs is installed too. This also
