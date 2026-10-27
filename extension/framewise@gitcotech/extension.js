@@ -19,6 +19,7 @@ import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
 import {Indicator} from './indicator.js';
@@ -29,7 +30,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.11';
+const VERSION = '1.12';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -141,10 +142,15 @@ function formatTime(seconds) {
 // of the clock, instead of being added to it (adding them would shift the
 // clock). Floating, they sit in one fixed spot the app can cover in the saved
 // video with the clean top bar from before they appeared.
+//
+// When the top bar isn't at the top of the main screen with the clock in it
+// (moved to the bottom or replaced by another extension, or hidden), they
+// go inside the bar as before instead, and nothing is covered.
 const Controls = GObject.registerClass(
 class FramewiseControls extends St.BoxLayout {
-    _init(onPause, onStop) {
+    _init(onPause, onStop, floating) {
         super._init({style_class: 'framewise-controls framewise-box', reactive: true});
+        this._floating = floating;
 
         this._dot = new St.Label({text: '●', style_class: 'framewise-dot', y_align: Clutter.ActorAlign.CENTER});
         this._time = new St.Label({text: '0:00', style_class: 'framewise-time', y_align: Clutter.ActorAlign.CENTER});
@@ -162,6 +168,8 @@ class FramewiseControls extends St.BoxLayout {
         this.add_child(this._pause);
         this.add_child(stop);
 
+        if (!floating)
+            return;
         Main.layoutManager.addTopChrome(this, {trackFullscreen: true});
         this._clock = Main.panel.statusArea.dateMenu?.container ?? null;
         this._clockId = this._clock?.connect('notify::allocation', () => this._place()) ?? 0;
@@ -184,8 +192,11 @@ class FramewiseControls extends St.BoxLayout {
         this.set_position(Math.round(x), monitor.y);
     }
 
-    // Where the controls are, in screen (logical) pixels.
+    // Where the controls are, in screen (logical) pixels; nothing when they
+    // sit inside the bar (they move with it, so there's no fixed spot).
     rect() {
+        if (!this._floating)
+            return [0, 0, 0, 0];
         const [x, y] = this.get_transformed_position();
         return [Math.round(x), Math.round(y), Math.round(this.width), Math.round(this.height)];
     }
@@ -205,10 +216,27 @@ class FramewiseControls extends St.BoxLayout {
         if (this._clockId)
             this._clock.disconnect(this._clockId);
         this._clockId = 0;
-        Main.layoutManager.removeChrome(this);
+        if (this._floating)
+            Main.layoutManager.removeChrome(this);
         super.destroy();
     }
 });
+
+// GNOME's own top bar, with the clock in it, along the top of the main
+// screen (not moved to the bottom, replaced or hidden by another extension).
+function topBarAtTop() {
+    const layout = Main.layoutManager;
+    const monitor = layout.primaryMonitor;
+    const clock = Main.panel.statusArea.dateMenu?.container;
+    if (!monitor || !clock || !Main.panel.contains(clock) || Main.panel.height <= 0)
+        return false;
+    // Hidden for a full-screen window is fine (it comes back); hidden for good isn't.
+    const fullscreen = global.display.get_monitor_in_fullscreen(layout.primaryIndex);
+    if (!fullscreen && !(layout.panelBox.visible && Main.panel.visible && clock.visible))
+        return false;
+    // Its resting place (.y), not where it is mid-slide when GNOME starts.
+    return Math.abs(layout.panelBox.y - monitor.y) <= 2 && layout.panelBox.height < monitor.height / 4;
+}
 
 export default class FramewiseExtension extends Extension {
     enable() {
@@ -461,9 +489,15 @@ export default class FramewiseExtension extends Extension {
     ShowControls() {
         if (this._controls)
             return;
+        const floating = topBarAtTop();
         this._controls = new Controls(
             () => this._dbus.emit_signal('PauseClicked', null),
-            () => this._dbus.emit_signal('StopClicked', null));
+            () => this._dbus.emit_signal('StopClicked', null), floating);
+        if (!floating) {
+            this._controlsButton = new PanelMenu.Button(0.5, 'framewise recording', true);
+            this._controlsButton.add_child(this._controls);
+            Main.panel.addToStatusArea('framewise-controls', this._controlsButton, 0, 'center');
+        }
     }
 
     ControlsRect() {
@@ -479,6 +513,8 @@ export default class FramewiseExtension extends Extension {
             this._controls.destroy();
             this._controls = null;
         }
+        this._controlsButton?.destroy();
+        this._controlsButton = null;
     }
 
     // A round badge with the seconds left, floating over the live screen.
