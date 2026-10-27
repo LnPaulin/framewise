@@ -758,7 +758,7 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
 
     def _load_controls_patch(self):
         """The clean top bar over the recording controls, made in the background."""
-        rect = controls_patch.in_area(self.info, self.info.get("crop"))
+        rect = controls_patch.in_area(self.info, self.video_size, self.info.get("crop"))
         if not rect:
             return
 

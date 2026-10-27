@@ -35,15 +35,27 @@ class GeometryTests(unittest.TestCase):
     def test_outside_area_is_none(self):
         info = {"controls": {"rect": [0.45, 0.0, 0.05, 0.03]}}
         self.assertIsNone(cp.pixels(info, (1920, 1080), (0.0, 0.5, 0.5, 0.5)))
-        self.assertIsNone(cp.in_area(info, (0.0, 0.5, 0.5, 0.5)))
+        self.assertIsNone(cp.in_area(info, (1920, 1080), (0.0, 0.5, 0.5, 0.5)))
         self.assertIsNotNone(cp.pixels(info, (1920, 1080), (0.4, 0.0, 0.5, 0.5)))
+
+    def test_preview_matches_the_cut_pixels(self):
+        # Seen on a 3440 x 1440 screen: the picture is cut 200 x 38, so the
+        # preview must draw it over exactly those pixels, not 198 x 36.
+        info = {"controls": {"rect": [0.41977, 0.0, 0.05756, 0.025]}}
+        size, crop = (3440, 1440), (0.0, 0.0, 0.7034384084302325, 0.9993055555555556)
+        x, y, w, h = cp.pixels(info, size, crop)
+        fx, fy, fw, fh = cp.in_area(info, size, crop)
+        self.assertAlmostEqual(fx * crop[2] * 3440, x)
+        self.assertAlmostEqual(fw * crop[2] * 3440, w)
+        self.assertAlmostEqual(fh * crop[3] * 1440, h)
+        self.assertAlmostEqual(fy, 0.0)
 
     def test_in_area_fractions(self):
         info = {"controls": {"rect": [0.5, 0.0, 0.1, 0.05]}}
-        x, y, w, h = cp.in_area(info, (0.25, 0.0, 0.5, 0.5))
+        x, y, w, h = cp.in_area(info, (1000, 1000), (0.25, 0.0, 0.5, 0.5))
         self.assertAlmostEqual(x, 0.5)
-        self.assertAlmostEqual(w, 0.2)
-        self.assertAlmostEqual(h, 0.1)
+        self.assertAlmostEqual(w, 0.204)      # 102 pixels (rounded out, even)
+        self.assertAlmostEqual(h, 0.104)
 
     def test_no_controls(self):
         self.assertIsNone(cp.pixels({}, (100, 100)))

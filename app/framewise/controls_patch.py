@@ -56,17 +56,17 @@ def pixels(take_info, size, crop_fraction=None):
     return (x, y, w, h) if w >= 2 and h >= 2 else None
 
 
-def in_area(take_info, crop_fraction):
+def in_area(take_info, size, crop_fraction=None):
     """The covered part as fractions of the recorded area (what the editor
-    preview shows), or None."""
-    c = (take_info or {}).get("controls")
-    if not c or not c.get("rect"):
+    preview shows), or None. Exactly the pixels the clean picture is cut
+    from, so the preview draws it 1:1, as the saved video does."""
+    px = pixels(take_info, size, crop_fraction)
+    if px is None:
         return None
-    fx, fy, fw, fh = c["rect"]
+    vw, vh = size
+    x, y, w, h = (px[0] / vw, px[1] / vh, px[2] / vw, px[3] / vh)
     cx, cy, cw, ch = crop_fraction or (0.0, 0.0, 1.0, 1.0)
-    if fx >= cx + cw or fx + fw <= cx or fy >= cy + ch or fy + fh <= cy:
-        return None
-    return ((fx - cx) / cw, (fy - cy) / ch, fw / cw, fh / ch)
+    return ((x - cx) / cw, (y - cy) / ch, w / cw, h / ch)
 
 
 def patch_file(take_dir, take_info, size, crop_fraction=None):
