@@ -162,3 +162,15 @@ class SaveTests(TakeCase):
         doc = em.normalize(doc, 2.0)
         out = self._save(doc)
         self.assertLess(_grey_at(out, 1.5, *self.BOX), 150)
+
+
+class SoftwareSaveTests(SaveTests):
+    """The same saves without a graphics chip (NVIDIA's driver, a virtual
+    machine): frames are decoded in memory, not on the chip."""
+
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        patcher = mock.patch.object(gpu, "ffmpeg_vaapi", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)

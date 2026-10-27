@@ -451,7 +451,7 @@ def render_assets(doc, lay, out_dir, take_dir):
     return assets
 
 
-def _picture_chain(plan, fps, duration, first_input):
+def _picture_chain(plan, fps, duration, first_input, hw=True):
     """The video filter graph for zoom, blur, shape, background and overlays.
 
     Runs on the CPU between GPU decoding and encoding. first_input is the
@@ -466,7 +466,9 @@ def _picture_chain(plan, fps, duration, first_input):
     inputs, idx = [], first_input
     loop = lambda path: ["-loop", "1", "-framerate", str(fps), "-t", f"{duration:.3f}", "-i", str(path)]  # noqa: E731
 
-    parts = ["[0:v]hwdownload,format=nv12[c0]"]
+    # Frames come from the graphics chip when it decodes (hw), else they're
+    # already in memory.
+    parts = ["[0:v]hwdownload,format=nv12[c0]" if hw else "[0:v]format=nv12[c0]"]
     cur = "c0"
     patch = plan.get("patch")
     if patch:
@@ -577,7 +579,7 @@ def build_edit_command(take, dest, doc, names, crop=None, fps=60, qp=16, mic_cle
     extra = []
     if plan:
         first = 2 if mic_clean else 1
-        picture, last, extra = _picture_chain(plan, fps, duration, first)
+        picture, last, extra = _picture_chain(plan, fps, duration, first, hw)
         upload = "format=nv12,hwupload" if hw else "format=yuv420p"
         chains = [picture + f";[{last}]{upload},select='{sel}',"
                             f"setpts=N/({rate:g}*TB){scale},setsar=1[v]"]
