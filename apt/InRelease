@@ -1,0 +1,29 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Origin: Framewise
+Label: Framewise
+Suite: stable
+Codename: stable
+Date: Tue, 27 Oct 2026 02:33:40 GMT
+Architectures: all amd64 arm64 i386 armhf riscv64
+Description: Framewise updates (https://github.com/LnPaulin/framewise)
+MD5Sum:
+ ba03619a36c261aac580c2fb4fe4bd1d     6083 Packages
+ 2bb7475f6d58b36f564df896b74588c5     1544 Packages.gz
+SHA1:
+ bf1007d23466a3f0b1bb10165392dd0246bb0a81     6083 Packages
+ f9da6be998a03ceaea5ddb1711ecd1f605d4f01c     1544 Packages.gz
+SHA256:
+ 4aec8f5ef8d250ae6982d182ca926197902c7753b09a2607f6e07085ddae656e     6083 Packages
+ 01bbc785f3a4178b2ecb153bc1a284b5c8c8dc9952ac9745da2d4fe033fe19c6     1544 Packages.gz
+SHA512:
+ bda377a4fc86c7d4e880a1db1897145bd718ac9ef8c79d168248d93c88da8cced90f563e2296f3236841ae5e22428e1fd8a7f5861009b576db95c6aaf6cbb2fd     6083 Packages
+ a33e3048317cfb773fccd573ac9262647f2779da4ffdedb5c5027321a217b84b1f9a6ccae9f39d0c1814b9032d6124638e2890b832d5e6239f080421e08de77e     1544 Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQT2m5mVjfPeRJozyr8rjZTRkurcTwUCauANhAAKCRArjZTRkurc
+T55AAQDyJgtqfpWHGxcv34WGmI+jGwEL8NvTqdN5xyU6B67IQgEApfjZIK9TTYZh
+sHy0J9e3xIf3f7ZjyH8rrbENBOvqIws=
+=7Zsg
+-----END PGP SIGNATURE-----

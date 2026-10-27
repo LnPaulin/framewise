@@ -1,0 +1,7 @@
+# Framewise updates, installed with Framewise: new versions appear in
+# Software Updater. Signed with the Framewise key in /etc/apt/keyrings.
+# To stop getting updates, remove Framewise with: sudo apt purge framewise
+Types: deb
+URIs: https://lnpaulin.github.io/framewise/apt/
+Suites: ./
+Signed-By: /etc/apt/keyrings/framewise.gpg

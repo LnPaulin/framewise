@@ -1,0 +1,110 @@
+Package: framewise
+Version: 1.0.12
+Architecture: all
+Section: video
+Priority: optional
+Maintainer: gitcotech <gitcotech2@gmail.com>
+Homepage: https://t.me/gitcotech
+Installed-Size: 2112
+Depends: python3 (>= 3.12), python3-gi, python3-gi-cairo, python3-cairo, python3-numpy,
+ gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), gir1.2-graphene-1.0, gir1.2-gdkpixbuf-2.0,
+ gir1.2-pango-1.0, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-base-1.0, gir1.2-xdp-1.0,
+ gstreamer1.0-pipewire, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,
+ gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gstreamer1.0-gtk4,
+ ffmpeg, wl-clipboard, tesseract-ocr, tesseract-ocr-eng, xdg-desktop-portal-gnome,
+ gnome-shell (>= 46)
+Recommends: sound-theme-freedesktop, packagekit, gir1.2-packagekitglib-1.0, gstreamer1.0-plugins-extra | gstreamer1.0-vaapi, python3-opencv, python3-venv,
+ intel-media-va-driver | mesa-va-drivers | va-driver-all
+Suggests: tesseract-ocr-fra, tesseract-ocr-spa, tesseract-ocr-deu
+Description: Screen recorder, screenshots, text from the screen and clipboard history
+ Framewise records the screen (an area, a window or the whole screen) with
+ system sound, microphone and a camera bubble, and opens each recording in an
+ editor with cuts, silence and filler-word removal, noise removal, zoom on
+ click, backgrounds and export options (speed, size limit, GIF).
+ .
+ It also takes screenshots with a mark-up editor and pinning, copies text from
+ any part of the screen (OCR), keeps a clipboard history, and adds camera
+ effects (background blur, smooth skin, face light). Everything runs on this
+ computer.
+ .
+ Made for GNOME on Ubuntu. Brought to you by @gitcotech.
+Filename: ./framewise_1.0.12_all.deb
+Size: 780432
+MD5Sum: f2c7d6435bd4f0dbb576946761883cba
+SHA1: c09eacf67e54a8e2c79bf8fe8370690251af50a8
+SHA256: ad7ec10b1b61051fe78cf09a08905629a4c618316ca886bc26c94950fa246a9a
+SHA512: ab58aaac58bf69a900cda4db52a6aa978087843d41b07edf1d3756e0f974b85070d92b2c7c066d2d531e476f7c8807cd559f8d970e695f7db1589215a2a3d5a9
+
+Package: framewise
+Version: 1.0.11
+Architecture: all
+Section: video
+Priority: optional
+Maintainer: gitcotech <gitcotech2@gmail.com>
+Homepage: https://t.me/gitcotech
+Installed-Size: 2112
+Depends: python3 (>= 3.12), python3-gi, python3-gi-cairo, python3-cairo, python3-numpy,
+ gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), gir1.2-graphene-1.0, gir1.2-gdkpixbuf-2.0,
+ gir1.2-pango-1.0, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-base-1.0, gir1.2-xdp-1.0,
+ gstreamer1.0-pipewire, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,
+ gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gstreamer1.0-gtk4,
+ ffmpeg, wl-clipboard, tesseract-ocr, tesseract-ocr-eng, xdg-desktop-portal-gnome,
+ gnome-shell (>= 46)
+Recommends: sound-theme-freedesktop, packagekit, gir1.2-packagekitglib-1.0, gstreamer1.0-plugins-extra | gstreamer1.0-vaapi, python3-opencv, python3-venv,
+ intel-media-va-driver | mesa-va-drivers | va-driver-all
+Suggests: tesseract-ocr-fra, tesseract-ocr-spa, tesseract-ocr-deu
+Description: Screen recorder, screenshots, text from the screen and clipboard history
+ Framewise records the screen (an area, a window or the whole screen) with
+ system sound, microphone and a camera bubble, and opens each recording in an
+ editor with cuts, silence and filler-word removal, noise removal, zoom on
+ click, backgrounds and export options (speed, size limit, GIF).
+ .
+ It also takes screenshots with a mark-up editor and pinning, copies text from
+ any part of the screen (OCR), keeps a clipboard history, and adds camera
+ effects (background blur, smooth skin, face light). Everything runs on this
+ computer.
+ .
+ Made for GNOME on Ubuntu. Brought to you by @gitcotech.
+Filename: ./framewise_1.0.11_all.deb
+Size: 781016
+MD5Sum: 62abd8c4fac3f01d3a715a44e8f4b7d6
+SHA1: c8ae27c3e8dc4335135f6151a2c9b26d06a1ad84
+SHA256: f84fc54d4395b99d1726ac404b12e3a63c09005ec452bb5880394b57d7852f2d
+SHA512: 9022a33d717df8eb1c4f5c487d675b4b8c55d435c9fec8f0526c8b12db1d3fea836e15ea782fadd457670f1feae836c5668da1f9eee706ac5cf1ca1017dff46e
+
+Package: framewise
+Version: 1.0.10
+Architecture: all
+Section: video
+Priority: optional
+Maintainer: gitcotech <gitcotech2@gmail.com>
+Homepage: https://t.me/gitcotech
+Installed-Size: 2112
+Depends: python3 (>= 3.12), python3-gi, python3-gi-cairo, python3-cairo, python3-numpy,
+ gir1.2-gtk-4.0, gir1.2-adw-1 (>= 1.5), gir1.2-graphene-1.0, gir1.2-gdkpixbuf-2.0,
+ gir1.2-pango-1.0, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-base-1.0, gir1.2-xdp-1.0,
+ gstreamer1.0-pipewire, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,
+ gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gstreamer1.0-gtk4,
+ ffmpeg, wl-clipboard, tesseract-ocr, tesseract-ocr-eng, xdg-desktop-portal-gnome,
+ gnome-shell (>= 46)
+Recommends: sound-theme-freedesktop, packagekit, gir1.2-packagekitglib-1.0, gstreamer1.0-plugins-extra | gstreamer1.0-vaapi, python3-opencv, python3-venv,
+ intel-media-va-driver | mesa-va-drivers | va-driver-all
+Suggests: tesseract-ocr-fra, tesseract-ocr-spa, tesseract-ocr-deu
+Description: Screen recorder, screenshots, text from the screen and clipboard history
+ Framewise records the screen (an area, a window or the whole screen) with
+ system sound, microphone and a camera bubble, and opens each recording in an
+ editor with cuts, silence and filler-word removal, noise removal, zoom on
+ click, backgrounds and export options (speed, size limit, GIF).
+ .
+ It also takes screenshots with a mark-up editor and pinning, copies text from
+ any part of the screen (OCR), keeps a clipboard history, and adds camera
+ effects (background blur, smooth skin, face light). Everything runs on this
+ computer.
+ .
+ Made for GNOME on Ubuntu. Brought to you by @gitcotech.
+Filename: ./framewise_1.0.10_all.deb
+Size: 779928
+MD5Sum: 68fcf81083927fc5d56cdb24cdd20e50
+SHA1: 17e12535c5c637467d9c048e149e392733376dbe
+SHA256: e73fa2ed1022092acda41a7dc6a8fea78e0412bd05ac3f057d90ebf14c9f8258
+SHA512: 2ffffde39d8a1c475a6770411d229a330e4d973dc8cb6a341f38c5602f33a61a60e5b177e45ab91431af7837dbff5ffc9e362cc7bb26de1a998bdd19e7529e8a
