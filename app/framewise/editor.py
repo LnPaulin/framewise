@@ -18,7 +18,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from . import edit_model as em  # noqa: E402
-from . import export  # noqa: E402
+from . import controls_patch, export  # noqa: E402
 from . import denoise  # noqa: E402
 from . import silence  # noqa: E402
 from . import speech  # noqa: E402
@@ -177,6 +177,7 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         self.picture.time_source = self.player.position
         self.picture.on_click = self.player.toggle
         self.picture.on_pick = self._on_pick_spot
+        self._load_controls_patch()
 
         # Transport
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic",
@@ -751,7 +752,30 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
             self.idle_activity = activity
             self._update_idle()
 
-        idle.analyse_async(self.take, self.take_dir, self.duration, self.crop_px, self.tracks, done)
+        ignore = controls_patch.pixels(self.info, self.video_size, self.info.get("crop"))
+        idle.analyse_async(self.take, self.take_dir, self.duration, self.crop_px, self.tracks, done,
+                           ignore_px=ignore)
+
+    def _load_controls_patch(self):
+        """The clean top bar over the recording controls, made in the background."""
+        rect = controls_patch.in_area(self.info, self.info.get("crop"))
+        if not rect:
+            return
+
+        def work():
+            path = controls_patch.patch_file(self.take_dir, self.info, self.video_size, self.info.get("crop"))
+            GLib.idle_add(ready, path)
+
+        def ready(path):
+            if path and not getattr(self, "_closing", False):
+                try:
+                    self.picture.set_patch(Gdk.Texture.new_from_filename(str(path)), rect)
+                except GLib.Error:
+                    pass
+            return False
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
 
     def _update_idle(self):
         """The idle parts not already sped up or cut, for the chosen speed."""

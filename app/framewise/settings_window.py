@@ -96,6 +96,9 @@ class SettingsWindow(Adw.PreferencesWindow):
         video.add(_combo("Quality", None, QUALITIES, "quality"))
         video.add(_combo("Frame rate", None, FPS, "fps"))
         video.add(_combo("Countdown", "Before the recording starts", COUNTDOWNS, "countdown"))
+        video.add(_switch("Hide recording controls in videos",
+                          "The time, pause and stop in the top bar don't show in screen and area recordings",
+                          "hide_controls"))
         page.add(video)
 
         sound = Adw.PreferencesGroup(title="Audio")

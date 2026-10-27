@@ -468,6 +468,14 @@ def _picture_chain(plan, fps, duration, first_input):
 
     parts = ["[0:v]hwdownload,format=nv12[c0]"]
     cur = "c0"
+    patch = plan.get("patch")
+    if patch:
+        # The recording controls, covered with the clean top bar (controls_patch.py).
+        inputs += ["-i", str(patch["file"])]
+        x, y, _w, _h = patch["px"]
+        parts.append(f"[{idx}:v]format=nv12[pt];[{cur}][pt]overlay={x}:{y}:eof_action=repeat[cpt]")
+        idx += 1
+        cur = "cpt"
     for k, b in enumerate(plan["blurs"]):
         x, y, w, h = b["px"]
         parts.append(f"[{cur}]split[ba{k}][bb{k}];[bb{k}]crop={w}:{h}:{x}:{y},gblur=sigma={b['sigma']:.1f}[bl{k}];"
@@ -538,7 +546,7 @@ def atempo_chain(speed):
 
 
 def build_edit_command(take, dest, doc, names, crop=None, fps=60, qp=16, mic_clean=None,
-                       plan=None, duration=None, out=None, hw=None):
+                       plan=None, duration=None, out=None, hw=None, patch=None):
     """Applies trim, cuts and per-track volume, plus the picture plan if any.
 
     Video: frames inside the kept parts are selected (frame-accurate) and
@@ -576,10 +584,24 @@ def build_edit_command(take, dest, doc, names, crop=None, fps=60, qp=16, mic_cle
     else:
         if crop and not size:
             scale = f",{_scaler(hw, crop[2], crop[3])}"
-        chains = [f"[0:v]select='{sel}',setpts=N/({rate:g}*TB)"
+        src = "[0:v]"
+        if patch:
+            # Cover the recording controls (controls_patch.py): on the CPU for
+            # this one step, the rest stays on the graphics chip.
+            first = 2 if mic_clean else 1
+            extra = ["-i", str(patch["file"])]
+            x, y, _w, _h = patch["px"]
+            down, up = ("hwdownload,format=nv12,", ",format=nv12,hwupload") if hw else ("", "")
+            chains = [f"[0:v]{down}null[pm];[{first}:v]format=nv12[pt];"
+                      f"[pm][pt]overlay={x}:{y}:eof_action=repeat{up}[pv]"]
+            src = "[pv]"
+        else:
+            chains = []
+        chains.append(f"{src}select='{sel}',setpts=N/({rate:g}*TB)"
                   + (f",crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]}" if crop else "")
                   + (f"{scale},setsar=1" if scale else "")
-                  + "[v]"]
+                  + "[v]")
+        chains = [";".join(chains)]
 
     live = []
     tempo = atempo_chain(speed)
@@ -841,10 +863,17 @@ def save_async(take, dest, crop_fraction, on_done, doc=None, take_info=None,
         tmp.unlink(missing_ok=True)
         on_done(False, "cancelled" if job.cancelled else message)
 
+    from . import controls_patch
+
     size = video_size(take)
     crop = crop_pixels(crop_fraction, size) if crop_fraction else None
     count = audio_track_count(take)
-    edited = doc is not None and duration and (gif or not em.is_unedited(doc, duration))
+    patch = None
+    if doc is not None and duration:
+        file = controls_patch.patch_file(Path(take).parent, take_info, size, crop_fraction)
+        if file:
+            patch = {"file": file, "px": controls_patch.pixels(take_info, size, crop_fraction)}
+    edited = doc is not None and duration and (gif or patch or not em.is_unedited(doc, duration))
     if not edited:
         _run_step(job, build_command(take, tmp, crop, count), None, None, finish)
         return job
@@ -855,6 +884,7 @@ def save_async(take, dest, crop_fraction, on_done, doc=None, take_info=None,
     plan = None
     if em.has_zoom(doc) or em.needs_compose(doc):
         plan = plan_picture(Path(take).parent, doc, crop_fraction, size, duration, fps, work)
+        plan["patch"] = patch
     mic_clean = None
     if (doc.get("denoise") or {}).get("mic"):
         from . import denoise
@@ -866,7 +896,7 @@ def save_async(take, dest, crop_fraction, on_done, doc=None, take_info=None,
 
     def command(target, out):
         return build_edit_command(take, target, doc, names, crop, fps=fps, mic_clean=mic_clean,
-                                  plan=plan, duration=duration, out=out)
+                                  plan=plan, duration=duration, out=out, patch=patch)
 
     if gif:
         work.mkdir(parents=True, exist_ok=True)

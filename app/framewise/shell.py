@@ -125,6 +125,16 @@ class ShellHelper:
     def hide_controls(self):
         self._call("HideControls")
 
+    @property
+    def has_controls_rect(self):
+        # 1.11 floats the controls in one fixed spot and says where.
+        return self.version() >= (1, 11)
+
+    def controls_rect(self):
+        """(x, y, w, h) of the recording controls on screen, or None."""
+        res = self._call_sync("ControlsRect", None, 1000)
+        return tuple(res) if res and res[2] > 0 and res[3] > 0 else None
+
     def show_countdown(self, center_x, center_y, seconds):
         self._call("ShowCountdown", GLib.Variant("(iii)", (int(center_x), int(center_y), int(seconds))))
 

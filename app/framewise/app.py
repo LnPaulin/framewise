@@ -15,7 +15,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 
-from . import export, frame, portal, ui  # noqa: E402
+from . import controls_patch, export, frame, portal, ui  # noqa: E402
 from .shell import ShellCountdown, ShellHelper  # noqa: E402
 from .recorder import Recorder, RecorderError  # noqa: E402
 from .state import settings  # noqa: E402
@@ -207,7 +207,8 @@ class Session:
                 "system_delay": round(getattr(self.recorder, "system_delay", 0.0), 4),
                 "cursor": getattr(self, "cursor", "embedded"),
                 "system_audio": settings.get("system_audio"),
-                "microphone": settings.get("microphone")}
+                "microphone": settings.get("microphone"),
+                "controls": getattr(self, "controls_info", None)}
 
     def _show_border(self, window_mode):
         """A red border marking what is recorded, drawn by the extension."""
@@ -249,13 +250,37 @@ class Session:
             self.shell.start_pointer_track()
         if self.app.bubble:
             self.app.keep_camera_above()
+        self.controls_info = None
         if self.use_shell:
-            # Controls in the top bar, where no window can cover them.
-            self.shell.show_controls()
+            # Controls in the top bar, where no window can cover them. To keep
+            # them out of the video they appear a moment later (the first
+            # frames show the top bar without them) and their spot is noted.
+            if (not self.window_mode and settings.get("hide_controls")
+                    and self.shell.has_controls_rect):
+                GLib.timeout_add(controls_patch.SHOW_DELAY_MS, self._show_shell_controls)
+            else:
+                self.shell.show_controls()
         else:
             self.pill = ui.ControlsPill(self.app, self.toggle_pause, self.stop)
             self.pill.present()
         self.tick = GLib.timeout_add(250, self._update_pill)
+        return False
+
+    def _show_shell_controls(self):
+        if self.phase == self.RECORDING:
+            self.shell.show_controls()
+            # Placed on the next frame; ask where once it is.
+            GLib.timeout_add(250, self._note_controls)
+        return False
+
+    def _note_controls(self):
+        if self.phase != self.RECORDING:
+            return False
+        rect = self.shell.controls_rect()
+        if rect:
+            g = self.monitor.get_geometry()
+            self.controls_info = controls_patch.info_for(rect, (g.x, g.y, g.width, g.height))
+            print("controls:", rect, "->", self.controls_info, flush=True)
         return False
 
     def _update_pill(self):
@@ -369,13 +394,15 @@ class Session:
             return
         dest = export.destination(settings.get("folder"))
         doc, info, duration = None, None, None
-        if getattr(self, "cursor", "embedded") == "hidden":
-            # Saving straight away: the pointer still has to be drawn back in.
+        hidden = getattr(self, "cursor", "embedded") == "hidden"
+        if hidden or getattr(self, "controls_info", None):
+            # Saving straight away: the pointer still has to be drawn back in,
+            # or the controls covered.
             from . import edit_model as em
             from .editor import probe_duration
             duration = probe_duration(self.take_dir / "take.mkv")
             doc = em.new_document(duration)
-            doc["pointer"]["drawn"] = True
+            doc["pointer"]["drawn"] = hidden
             doc["zoom"]["enabled"] = False
             doc = em.normalize(doc, duration)
             info = {**self._take_info(), "crop": self.crop}
@@ -411,6 +438,7 @@ class Session:
         was_active = self.phase != self.IDLE
         self.phase = self.IDLE
         self.capture = self.recorder = self.take_dir = self.crop = None
+        self.controls_info = None
         if was_active:
             self.app.release()
 

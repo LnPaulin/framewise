@@ -41,10 +41,14 @@ MIN_PART = 0.6          # shortest sped-up part worth making
 
 # ---- the signals, as one True/False per analysed frame ---------------------------------
 
-def screen_activity(take, crop_px=None, fps=FPS):
+def screen_activity(take, crop_px=None, fps=FPS, ignore_px=None):
     """Whether the picture changes, per frame (index i covers [i/fps, (i+1)/fps)).
-    Frames are read as a stream: only per-block change counts are kept."""
-    vf = (f"crop={crop_px[2]}:{crop_px[3]}:{crop_px[0]}:{crop_px[1]}," if crop_px else "")
+    Frames are read as a stream: only per-block change counts are kept.
+    ignore_px: (x, y, w, h) in take pixels left out (the recording controls'
+    ticking time, which is covered in the video anyway)."""
+    vf = (f"drawbox=x={ignore_px[0]}:y={ignore_px[1]}:w={ignore_px[2]}:h={ignore_px[3]}:"
+          f"color=black:t=fill," if ignore_px else "")
+    vf += (f"crop={crop_px[2]}:{crop_px[3]}:{crop_px[0]}:{crop_px[1]}," if crop_px else "")
     vf += f"fps={fps},scale={WIDTH}:-2,format=gray"
     probe = subprocess.run(["ffmpeg", "-hide_banner", "-v", "error", "-i", str(take), "-frames:v", "1",
                             "-vf", vf, "-f", "rawvideo", "-"], capture_output=True, timeout=60).stdout
@@ -189,7 +193,7 @@ def combine(*signals):
 
 # ---- the whole analysis, in the background, cached --------------------------------------
 
-def analyse_async(take, take_dir, duration, crop_px, tracks, on_done):
+def analyse_async(take, take_dir, duration, crop_px, tracks, on_done, ignore_px=None):
     """Measures every signal in the background; on_done(activity array or None).
 
     The result is cached in the take folder (idle.npz), so opening the panel
@@ -203,7 +207,7 @@ def analyse_async(take, take_dir, duration, crop_px, tracks, on_done):
                 result = np.load(cache)["active"]
             else:
                 from . import silence
-                screen = screen_activity(take, crop_px)
+                screen = screen_activity(take, crop_px, ignore_px=ignore_px)
                 pointer = None
                 pointer_file = Path(take_dir) / "pointer.json"
                 if pointer_file.exists():

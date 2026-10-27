@@ -55,6 +55,7 @@ class ZoomView(Gtk.Widget):
         self.background = None   # Gdk.Texture
         self.overlays = []       # [(item, texture, (x, y, w, h), opacity, fade)]
         self.blurs = []          # doc blur items
+        self.patch = None        # (texture, (x, y, w, h) fractions): the recording controls, covered
         self.pointer = None      # {"frames", "rings", "texture", "pad", "px", "rings_on"}
         # Editing modes
         self.picking = False     # choosing a zoom spot
@@ -98,6 +99,20 @@ class ZoomView(Gtk.Widget):
         self.layout, self.src_size = layout, src_size
         self.background, self.overlays, self.blurs = background, overlays, blurs
         self.queue_draw()
+
+    def set_patch(self, texture, rect):
+        """Covers the recording controls with the clean picture of that spot
+        (controls_patch.py), as the saved video does."""
+        self.patch = (texture, rect) if texture is not None and rect else None
+        self.queue_draw()
+
+    def _draw_patch(self, snap, box, view):
+        if not self.patch:
+            return
+        texture, (x, y, w, h) = self.patch
+        snap.append_texture(texture, _rect(box[0] + (x - view[0]) / view[2] * box[2],
+                                           box[1] + (y - view[1]) / view[3] * box[3],
+                                           w / view[2] * box[2], h / view[3] * box[3]))
 
     def set_pointer(self, pointer_data):
         self.pointer = pointer_data
@@ -225,6 +240,7 @@ class ZoomView(Gtk.Widget):
         rounded.init_from_rect(_rect(*box), lay["radius"] * k)
         snap.push_rounded_clip(rounded)
         self._draw_video(snap, box, view)
+        self._draw_patch(snap, box, view)
         # Blurs: the same part of the recording, drawn again blurred.
         src_w, src_h = self.src_size
         for b in self.blurs:
@@ -295,6 +311,7 @@ class ZoomView(Gtk.Widget):
     def _snapshot_whole(self, snap):
         fx, fy, fw, fh = self._whole()
         self._draw_video(snap, (fx, fy, fw, fh), (0.0, 0.0, 1.0, 1.0))
+        self._draw_patch(snap, (fx, fy, fw, fh), (0.0, 0.0, 1.0, 1.0))
         if self.picking:
             frame = None
             if self._hover:

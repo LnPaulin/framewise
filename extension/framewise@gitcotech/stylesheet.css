@@ -7,6 +7,21 @@
   spacing: 6px;
 }
 
+.framewise-controls {
+  color: white;
+  padding: 0 8px;
+  font-weight: bold;
+}
+
+.framewise-controls .framewise-button {
+  padding: 4px 6px;
+}
+
+.framewise-controls .system-status-icon {
+  icon-size: 16px;
+  padding: 0;
+}
+
 .framewise-dot {
   color: #e5484d;
   font-size: 11pt;

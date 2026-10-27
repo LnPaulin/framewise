@@ -19,7 +19,6 @@ import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
 import {Indicator} from './indicator.js';
@@ -30,7 +29,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.10';
+const VERSION = '1.11';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -74,6 +73,12 @@ const IFACE = `
       <arg type="b" direction="in" name="paused"/>
     </method>
     <method name="HideControls"/>
+    <method name="ControlsRect">
+      <arg type="i" direction="out" name="x"/>
+      <arg type="i" direction="out" name="y"/>
+      <arg type="i" direction="out" name="width"/>
+      <arg type="i" direction="out" name="height"/>
+    </method>
     <method name="ShowCountdown">
       <arg type="i" direction="in" name="centerX"/>
       <arg type="i" direction="in" name="centerY"/>
@@ -132,27 +137,57 @@ function formatTime(seconds) {
     return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
+// The recording controls float over an empty part of the top bar, just left
+// of the clock, instead of being added to it (adding them would shift the
+// clock). Floating, they sit in one fixed spot the app can cover in the saved
+// video with the clean top bar from before they appeared.
 const Controls = GObject.registerClass(
-class FramewiseControls extends PanelMenu.Button {
+class FramewiseControls extends St.BoxLayout {
     _init(onPause, onStop) {
-        super._init(0.5, 'framewise recording', true);
-        this.add_style_class_name('framewise-controls');
+        super._init({style_class: 'framewise-controls framewise-box', reactive: true});
 
-        const box = new St.BoxLayout({style_class: 'framewise-box', y_align: Clutter.ActorAlign.CENTER});
         this._dot = new St.Label({text: '●', style_class: 'framewise-dot', y_align: Clutter.ActorAlign.CENTER});
         this._time = new St.Label({text: '0:00', style_class: 'framewise-time', y_align: Clutter.ActorAlign.CENTER});
-        this._pauseIcon = new St.Icon({icon_name: 'media-playback-pause-symbolic', style_class: 'system-status-icon'});
-        this._pause = new St.Button({child: this._pauseIcon, style_class: 'framewise-button', can_focus: true});
+        this._pauseIcon = new St.Icon({icon_name: 'media-playback-pause-symbolic', style_class: 'system-status-icon', icon_size: 16});
+        this._pause = new St.Button({child: this._pauseIcon, style_class: 'framewise-button', can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER});
         this._pause.connect('clicked', () => onPause());
-        const stopIcon = new St.Icon({icon_name: 'media-playback-stop-symbolic', style_class: 'system-status-icon'});
-        const stop = new St.Button({child: stopIcon, style_class: 'framewise-button framewise-stop', can_focus: true});
+        const stopIcon = new St.Icon({icon_name: 'media-playback-stop-symbolic', style_class: 'system-status-icon', icon_size: 16});
+        const stop = new St.Button({child: stopIcon, style_class: 'framewise-button framewise-stop', can_focus: true,
+            y_align: Clutter.ActorAlign.CENTER});
         stop.connect('clicked', () => onStop());
 
-        box.add_child(this._dot);
-        box.add_child(this._time);
-        box.add_child(this._pause);
-        box.add_child(stop);
-        this.add_child(box);
+        this.add_child(this._dot);
+        this.add_child(this._time);
+        this.add_child(this._pause);
+        this.add_child(stop);
+
+        Main.layoutManager.addTopChrome(this, {trackFullscreen: true});
+        this._clock = Main.panel.statusArea.dateMenu?.container ?? null;
+        this._clockId = this._clock?.connect('notify::allocation', () => this._place()) ?? 0;
+        this.connect('notify::width', () => this._place());
+        this._place();
+    }
+
+    _place() {
+        // The top bar always sits at the top of the main screen (measuring the
+        // bar itself would catch it mid-slide when GNOME starts).
+        const monitor = Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        this.height = Main.panel.height;
+        let x = monitor.x + (monitor.width - this.width) / 2;
+        if (this._clock) {
+            const [cx] = this._clock.get_transformed_position();
+            x = cx - this.width - 12;
+        }
+        this.set_position(Math.round(x), monitor.y);
+    }
+
+    // Where the controls are, in screen (logical) pixels.
+    rect() {
+        const [x, y] = this.get_transformed_position();
+        return [Math.round(x), Math.round(y), Math.round(this.width), Math.round(this.height)];
     }
 
     update(elapsed, paused) {
@@ -164,6 +199,14 @@ class FramewiseControls extends PanelMenu.Button {
             this._dot.remove_style_class_name('paused');
             this._pauseIcon.icon_name = 'media-playback-pause-symbolic';
         }
+    }
+
+    destroy() {
+        if (this._clockId)
+            this._clock.disconnect(this._clockId);
+        this._clockId = 0;
+        Main.layoutManager.removeChrome(this);
+        super.destroy();
     }
 });
 
@@ -421,7 +464,10 @@ export default class FramewiseExtension extends Extension {
         this._controls = new Controls(
             () => this._dbus.emit_signal('PauseClicked', null),
             () => this._dbus.emit_signal('StopClicked', null));
-        Main.panel.addToStatusArea('framewise-controls', this._controls, 0, 'center');
+    }
+
+    ControlsRect() {
+        return this._controls ? this._controls.rect() : [0, 0, 0, 0];
     }
 
     UpdateControls(elapsed, paused) {

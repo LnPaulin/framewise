@@ -47,6 +47,7 @@ DEFAULT_SETTINGS = {
     "microphone_device": "",      # "" = system default
     "camera": False,              # open the camera bubble with the record window
     "open_editor": True,          # open the editor after recording (else save straight away)
+    "hide_controls": True,        # keep the top-bar recording controls out of the video
     "folder": str(Path.home() / "Videos" / "Recordings"),
     "last_mode": "screen",        # area | window | screen
     "last_area": None,            # [x, y, w, h] in screen pixels
