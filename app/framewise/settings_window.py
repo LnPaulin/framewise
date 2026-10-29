@@ -34,6 +34,15 @@ LANGUAGE_NAMES = {
 }
 
 
+# Whisper language codes; "" detects the language each time.
+DICTATION_LANGUAGES = [
+    ("", "Automatic"), ("en", "English"), ("fr", "French"), ("es", "Spanish"), ("pt", "Portuguese"),
+    ("de", "German"), ("it", "Italian"), ("nl", "Dutch"), ("ar", "Arabic"), ("sw", "Swahili"),
+    ("ru", "Russian"), ("tr", "Turkish"), ("hi", "Hindi"), ("zh", "Chinese"), ("ja", "Japanese"),
+    ("ko", "Korean"),
+]
+
+
 def _combo(title, subtitle, options, key, on_change=None):
     """A ComboRow over (value, label[, description]) options bound to a setting."""
     row = Adw.ComboRow(title=title, subtitle=subtitle or "")
@@ -372,8 +381,8 @@ class SettingsWindow(Adw.PreferencesWindow):
         from . import speech
         group = Adw.PreferencesGroup(
             title="Speech recognition",
-            description="Used by the editor to detect filler words (um, uh). Runs locally; "
-                        "recordings are never uploaded.")
+            description="Used for dictation (Shift+Super+D types what you say) and by the editor "
+                        "to detect filler words (um, uh). Runs locally; nothing is uploaded.")
         self.speech_row = Adw.ActionRow(css_classes=["property"])
         self.speech_button = Gtk.Button(valign=Gtk.Align.CENTER)
         self.speech_button.connect("clicked", lambda *_: self._speech_clicked())
@@ -381,6 +390,9 @@ class SettingsWindow(Adw.PreferencesWindow):
         self.speech_row.add_suffix(self.speech_progress)
         self.speech_row.add_suffix(self.speech_button)
         group.add(self.speech_row)
+        group.add(_combo("Dictation language",
+                         "Automatic works for any language; choosing yours makes dictation faster",
+                         DICTATION_LANGUAGES, "dictation_language"))
         self._speech_busy = False
         self._update_speech()
         return group

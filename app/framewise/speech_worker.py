@@ -11,6 +11,11 @@ stdout, one JSON object per line:
 Usage:
   python speech_worker.py download MODEL_DIR MODEL_NAME
   python speech_worker.py transcribe MODEL_DIR AUDIO.wav [LANGUAGE]
+  python speech_worker.py serve MODEL_DIR
+
+serve (dictation) loads the model once, says {"ready": true}, then reads one
+request per line on stdin, {"wav": PATH, "language": "fr" or ""}, and answers
+each with {"text": "...", "language": "fr"} (or {"error": ...}).
 """
 
 import json
@@ -63,10 +68,39 @@ def transcribe(model_dir, audio, language=None):
     say(words=words, language=info.language)
 
 
+def dictate(model, audio, language=None):
+    """Plain text for dictation: punctuated, no word timings, silence skipped."""
+    segments, info = model.transcribe(
+        read_wav(audio), language=language or None, beam_size=5, vad_filter=True,
+        condition_on_previous_text=False)
+    text = " ".join(seg.text.strip() for seg in segments).strip()
+    return text, info.language
+
+
+def serve(model_dir):
+    import os
+
+    from faster_whisper import WhisperModel
+    # Dictation is waited on: more threads answer sooner (about twice as fast
+    # as the default 4), leaving a couple of cores for everything else.
+    threads = min(8, max(4, (os.cpu_count() or 4) - 2))
+    model = WhisperModel(model_dir, device="cpu", compute_type="int8", cpu_threads=threads)
+    say(ready=True)
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+            text, language = dictate(model, req["wav"], req.get("language"))
+            say(text=text, language=language)
+        except Exception as e:  # one bad request must not end the session
+            say(error=f"{type(e).__name__}: {e}")
+
+
 if __name__ == "__main__":
     try:
         if sys.argv[1] == "download":
             download(sys.argv[2], sys.argv[3])
+        elif sys.argv[1] == "serve":
+            serve(sys.argv[2])
         elif sys.argv[1] == "transcribe":
             transcribe(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     except Exception as e:  # report anything to the app instead of a traceback

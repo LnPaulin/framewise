@@ -33,6 +33,8 @@ SHORTCUTS = [
      lambda: f"{_launcher()} text", "<Shift><Super>t"),
     ("framewise-color", "Color picker (Framewise)", "Pick a color",
      lambda: f"{_launcher()} color", "<Shift><Super>p"),
+    ("framewise-dictate", "Dictation (Framewise)", "Dictate",
+     lambda: f"{_launcher()} dictate", "<Shift><Super>d"),
     ("framewise-clipboard", "Clipboard history (Framewise)", "Clipboard history",
      lambda: f"{_launcher()} clipboard", "<Shift><Super>v"),
     ("framewise-camera", "Camera (Framewise)", "Toggle camera",

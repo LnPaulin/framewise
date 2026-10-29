@@ -19,6 +19,7 @@ class ShellHelper:
         self.on_countdown_cancelled = None
         self.on_shot_action = None
         self.on_bubble_corner = None
+        self.on_dictation_clicked = None
         self._proxy = None
         try:
             self._proxy = Gio.DBusProxy.new_for_bus_sync(
@@ -103,6 +104,8 @@ class ShellHelper:
             self.on_shot_action(_params.unpack()[0])
         elif signal == "BubbleCornerChanged" and self.on_bubble_corner:
             self.on_bubble_corner(_params.unpack()[0])
+        elif signal == "DictationClicked" and self.on_dictation_clicked:
+            self.on_dictation_clicked()
 
     def show_area(self, x, y, w, h):
         self._call("ShowArea", GLib.Variant("(iiii)", (int(x), int(y), int(w), int(h))))
@@ -182,6 +185,24 @@ class ShellHelper:
 
     def hide_shot(self):
         self._call("HideShot")
+
+    # ---- dictation (1.13) ---------------------------------------------------------
+
+    @property
+    def has_dictation(self):
+        return self.version() >= (1, 13)
+
+    def show_dictation(self, state):
+        """state: "listening" or "writing"."""
+        self._call("ShowDictation", GLib.Variant("(s)", (state,)))
+
+    def hide_dictation(self):
+        self._call("HideDictation")
+
+    def type_text(self, text):
+        """Pastes text into the focused window. True when it was sent."""
+        res = self._call_sync("TypeText", GLib.Variant("(s)", (text,)), timeout=3000)
+        return bool(res and res[0])
 
     @property
     def has_clipboard(self):

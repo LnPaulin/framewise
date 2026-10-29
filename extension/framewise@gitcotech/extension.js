@@ -22,6 +22,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
+import {DictationPill, Typist} from './dictation.js';
 import {Indicator} from './indicator.js';
 import {BubblePlacement} from './placement.js';
 import {vbox} from './compat.js';
@@ -80,6 +81,14 @@ const IFACE = `
       <arg type="i" direction="out" name="width"/>
       <arg type="i" direction="out" name="height"/>
     </method>
+    <method name="ShowDictation">
+      <arg type="s" direction="in" name="state"/>
+    </method>
+    <method name="HideDictation"/>
+    <method name="TypeText">
+      <arg type="s" direction="in" name="text"/>
+      <arg type="b" direction="out" name="sent"/>
+    </method>
     <method name="ShowCountdown">
       <arg type="i" direction="in" name="centerX"/>
       <arg type="i" direction="in" name="centerY"/>
@@ -124,6 +133,7 @@ const IFACE = `
     <signal name="ShotAction">
       <arg type="s" name="action"/>
     </signal>
+    <signal name="DictationClicked"/>
     <signal name="PauseClicked"/>
     <signal name="StopClicked"/>
     <signal name="CountdownCancelled"/>
@@ -252,6 +262,8 @@ export default class FramewiseExtension extends Extension {
             this._dbus?.emit_signal('BubbleCornerChanged', new GLib.Variant('(s)', [corner])));
         this._placement.start();
         this._clipPicker = new ClipboardPicker(this._clipHistory);
+        this._typist = new Typist();
+        this._dictation = null;
         this._indicator = null;
         this._settingsFile = Gio.File.new_for_path(
             GLib.build_filenamev([GLib.get_user_config_dir(), 'framewise', 'settings.json']));
@@ -286,6 +298,9 @@ export default class FramewiseExtension extends Extension {
         this._indicator = null;
         this._clipPicker?.destroy();
         this._clipPicker = null;
+        this.HideDictation();
+        this._typist?.destroy();
+        this._typist = null;
         this._clipHistory?.stop();
         this._clipHistory = null;
         this.HideShot();
@@ -316,6 +331,7 @@ export default class FramewiseExtension extends Extension {
             this.HideControls();
             this.HideArea();
             this.HideShot();
+            this.HideDictation();
             this._stopTrackTimer();
             this._typing?.stop();
         }
@@ -506,6 +522,23 @@ export default class FramewiseExtension extends Extension {
 
     UpdateControls(elapsed, paused) {
         this._controls?.update(elapsed, paused);
+    }
+
+    // ---- dictation ----------------------------------------------------------------
+
+    ShowDictation(state) {
+        if (!this._dictation)
+            this._dictation = new DictationPill(() => this._dbus?.emit_signal('DictationClicked', null));
+        this._dictation.setState(state === 'writing' ? 'writing' : 'listening');
+    }
+
+    HideDictation() {
+        this._dictation?.destroy();
+        this._dictation = null;
+    }
+
+    TypeText(text) {
+        return this._typist ? this._typist.type(String(text)) : false;
     }
 
     HideControls() {

@@ -262,3 +262,37 @@
   font-size: 8.5pt;
   padding-left: 24px;
 }
+
+.framewise-dictation {
+  background-color: rgba(24, 24, 28, 0.92);
+  border-radius: 999px;
+  padding: 8px 16px;
+  color: white;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.framewise-dictation:hover {
+  background-color: rgba(36, 36, 42, 0.95);
+}
+
+.framewise-dictation-box {
+  spacing: 10px;
+}
+
+.framewise-dictation-dot {
+  color: #62a0ea;
+  font-size: 11pt;
+}
+
+.framewise-dictation.listening .framewise-dictation-dot {
+  color: #e5484d;
+}
+
+.framewise-dictation-label {
+  font-weight: bold;
+}
+
+.framewise-dictation-hint {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 9pt;
+}

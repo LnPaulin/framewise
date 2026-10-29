@@ -42,7 +42,7 @@ const MAX_ROWS = 300;                   // shown at once; search reaches the res
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff'];
 // Password managers (KeePassXC and others) mark secrets with this type.
 const SECRET_HINTS = ['x-kde-passwordManagerHint', 'application/x-kde-passwordManagerHint'];
-const TERMINALS = ['terminal', 'ptyxis', 'kgx', 'console', 'kitty', 'alacritty', 'konsole', 'tilix',
+export const TERMINALS = ['terminal', 'ptyxis', 'kgx', 'console', 'kitty', 'alacritty', 'konsole', 'tilix',
     'wezterm', 'foot', 'ghostty', 'xterm', 'blackbox', 'terminator'];
 
 const CLIPBOARD = St.ClipboardType.CLIPBOARD;

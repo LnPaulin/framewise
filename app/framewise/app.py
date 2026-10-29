@@ -31,6 +31,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise screenshot [--screen] [--delay SECONDS]
        framewise text
        framewise color
+       framewise dictate
        framewise clipboard
        framewise settings
        framewise camera
@@ -45,6 +46,7 @@ USAGE = """Usage: framewise              open the Framewise window
   screenshot --delay 3      wait 3 seconds first
   text            choose an area and copy the text (or QR code) in it
   color           click anywhere on the screen to copy its color (#RRGGBB)
+  dictate         speak, and the words are typed where the cursor is (again: finish)
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -476,6 +478,7 @@ class Framewise(Adw.Application):
                          ("record", self.record_toggle), ("screenshot", self.take_screenshot),
                          ("text", lambda: self.take_screenshot(text=True)),
                          ("color", lambda: self.take_screenshot(pick=True)),
+                         ("dictate", self.toggle_dictation),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
             action = Gio.SimpleAction.new(name, None)
@@ -525,6 +528,8 @@ class Framewise(Adw.Application):
 
     def do_shutdown(self):
         self.session.dnd.end()
+        if getattr(self, "dictation", None) is not None:
+            self.dictation.shutdown()
         from . import devices
         devices.shutdown()
         Adw.Application.do_shutdown(self)
@@ -546,8 +551,8 @@ class Framewise(Adw.Application):
         if args and args[0] in ("-h", "--help", "help"):
             cmdline.print_literal(USAGE)
             return 0
-        known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "edit",
-                 "record")
+        known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
+                 "edit", "record")
         if args and args[0] not in known:
             cmdline.printerr_literal(f"Unknown command: {args[0]}\n\n{USAGE}")
             return 2
@@ -582,6 +587,9 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "color":
             self.take_screenshot(pick=True)
+            return 0
+        if args[0] == "dictate":
+            self.toggle_dictation()
             return 0
         if args[0] == "edit" and len(args) > 1:
             path = cmdline.create_file_for_arg(args[1]).get_path()
@@ -711,6 +719,12 @@ class Framewise(Adw.Application):
         self.settings_window.present()
 
     # ---- screenshots -----------------------------------------------------------------
+
+    def toggle_dictation(self):
+        if getattr(self, "dictation", None) is None:
+            from .dictation import Dictation
+            self.dictation = Dictation(self)
+        self.dictation.toggle()
 
     def take_screenshot(self, whole_screen=False, delay=0, text=False, pick=False):
         if self.session.phase == Session.PREPARING:

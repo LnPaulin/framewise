@@ -49,6 +49,7 @@ DEFAULT_SETTINGS = {
     "open_editor": True,          # open the editor after recording (else save straight away)
     "hide_controls": True,        # keep the top-bar recording controls out of the video
     "recording_dnd": True,        # Do Not Disturb while recording (dnd.py)
+    "dictation_language": "",     # "" = detect each time; a code (e.g. "fr") answers faster
     "folder": str(Path.home() / "Videos" / "Recordings"),
     "last_mode": "screen",        # area | window | screen
     "last_area": None,            # [x, y, w, h] in screen pixels
