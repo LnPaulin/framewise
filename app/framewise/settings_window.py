@@ -99,6 +99,9 @@ class SettingsWindow(Adw.PreferencesWindow):
         video.add(_switch("Hide recording controls in videos",
                           "The time, pause and stop in the top bar don't show in screen and area recordings",
                           "hide_controls"))
+        video.add(_switch("Do Not Disturb while recording",
+                          "Notification pop-ups wait until the recording ends, so they don't land in the video",
+                          "recording_dnd"))
         page.add(video)
 
         sound = Adw.PreferencesGroup(title="Audio")

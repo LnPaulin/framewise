@@ -70,6 +70,8 @@ class Session:
         self.shell.on_pause = self.toggle_pause
         self.shell.on_stop = self.stop
         self.use_shell = False
+        from .dnd import DoNotDisturb
+        self.dnd = DoNotDisturb()
 
     # ---- start ----------------------------------------------------------------
 
@@ -162,6 +164,9 @@ class Session:
             self._reset()
             return
         self.use_shell = self.shell.available
+        # Pop-ups wait until the recording ends (from the countdown on, so
+        # one arriving just before the start is gone by then).
+        self.dnd.begin()
         self._show_border(window_mode)
         export.write_take_info(self.take_dir, {**self._take_info(), "crop": self.crop})
         seconds = settings.get("countdown") or 0
@@ -184,6 +189,7 @@ class Session:
             GLib.timeout_add(400, lambda: self._on_countdown(True) and False)
 
     def _on_recorder_error(self, message):
+        self.dnd.end()       # so this message can show
         self.app.notify("Recording error", message)
         if self.phase == self.PREPARING:
             # Failed before it began (e.g. during the countdown): take the
@@ -303,6 +309,7 @@ class Session:
         self._update_pill()
 
     def stop(self):
+        self.dnd.end()
         if self.phase == self.RECORDING:
             self.phase = self.SAVING
             self._close_pill()
@@ -431,6 +438,7 @@ class Session:
             self.shell.hide_area()
 
     def _reset(self):
+        self.dnd.end()
         if getattr(self, "tracking", False):
             self.shell.stop_pointer_track()
             self.tracking = False
@@ -486,6 +494,8 @@ class Framewise(Adw.Application):
         Adw.Application.do_startup(self)
         ui.install_css()
         self.session = Session(self)
+        # Framewise closed mid-recording last time: pop-ups back on.
+        self.session.dnd.end()
         export.sweep_old_takes()
         # First run for this person: shortcuts and the GNOME extension.
         from . import user_setup
@@ -506,6 +516,7 @@ class Framewise(Adw.Application):
         Gio.AppInfo.launch_default_for_uri(release_page(version), None)
 
     def do_shutdown(self):
+        self.session.dnd.end()
         from . import devices
         devices.shutdown()
         Adw.Application.do_shutdown(self)
