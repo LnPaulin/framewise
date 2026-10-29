@@ -27,6 +27,7 @@ TOOLS = [
      "framewise-dictate"),
     ("draw", "Draw on Screen", "Pen, arrows and a spotlight over anything", "document-edit-symbolic",
      "framewise-draw"),
+    ("scroll", "Scrolling Screenshot", "A whole page, scrolled for you", "go-down-symbolic", "framewise-scroll"),
     ("color", "Color Picker", "Copy the color of any pixel", "color-select-symbolic", "framewise-color"),
     ("fit", "Make a Video Fit", "A copy small enough to send", "video-x-generic-symbolic", None),
     ("send", "Send to Phone", "Through a QR code, on the same Wi-Fi", "phone-symbolic", None),

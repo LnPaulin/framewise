@@ -24,6 +24,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
 import {DictationPill, Typist} from './dictation.js';
 import {Drawing} from './draw.js';
+import {ScrollPill, Scroller} from './scroll.js';
 import {Indicator} from './indicator.js';
 import {BubblePlacement} from './placement.js';
 import {vbox} from './compat.js';
@@ -83,6 +84,26 @@ const IFACE = `
       <arg type="i" direction="out" name="height"/>
     </method>
     <method name="ToggleDrawing"/>
+    <method name="ScreenshotArea">
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="i" direction="in" name="width"/>
+      <arg type="i" direction="in" name="height"/>
+      <arg type="s" direction="in" name="path"/>
+      <arg type="b" direction="out" name="saved"/>
+    </method>
+    <method name="ScrollAt">
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="i" direction="in" name="clicks"/>
+    </method>
+    <method name="ShowScrollPill">
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="i" direction="in" name="width"/>
+      <arg type="i" direction="in" name="height"/>
+    </method>
+    <method name="HideScrollPill"/>
     <method name="ShowDictation">
       <arg type="s" direction="in" name="state"/>
     </method>
@@ -136,6 +157,7 @@ const IFACE = `
       <arg type="s" name="action"/>
     </signal>
     <signal name="DictationClicked"/>
+    <signal name="ScrollStopClicked"/>
     <signal name="PauseClicked"/>
     <signal name="StopClicked"/>
     <signal name="CountdownCancelled"/>
@@ -267,6 +289,8 @@ export default class FramewiseExtension extends Extension {
         this._typist = new Typist();
         this._dictation = null;
         this._drawing = new Drawing(this.path);
+        this._scroller = new Scroller();
+        this._scrollPill = null;
         this._indicator = null;
         this._settingsFile = Gio.File.new_for_path(
             GLib.build_filenamev([GLib.get_user_config_dir(), 'framewise', 'settings.json']));
@@ -306,6 +330,9 @@ export default class FramewiseExtension extends Extension {
         this._typist = null;
         this._drawing?.destroy();
         this._drawing = null;
+        this.HideScrollPill();
+        this._scroller?.destroy();
+        this._scroller = null;
         this._clipHistory?.stop();
         this._clipHistory = null;
         this.HideShot();
@@ -338,6 +365,7 @@ export default class FramewiseExtension extends Extension {
             this.HideShot();
             this.HideDictation();
             this._drawing?.destroy();
+            this.HideScrollPill();
             this._stopTrackTimer();
             this._typing?.stop();
         }
@@ -528,6 +556,36 @@ export default class FramewiseExtension extends Extension {
 
     UpdateControls(elapsed, paused) {
         this._controls?.update(elapsed, paused);
+    }
+
+    // ---- scrolling screenshots (scroll.js) ----------------------------------------
+
+    // One area of the screen, without the pointer (much quicker than the whole
+    // desktop when it is taken again and again).
+    async ScreenshotAreaAsync([x, y, width, height, path], invocation) {
+        try {
+            const stream = Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.NONE, null);
+            await new Shell.Screenshot().screenshot_area(x, y, width, height, stream);
+            stream.close(null);
+            invocation.return_value(new GLib.Variant('(b)', [true]));
+        } catch (e) {
+            console.error(`framewise area screenshot: ${e}`);
+            invocation.return_value(new GLib.Variant('(b)', [false]));
+        }
+    }
+
+    ScrollAt(x, y, clicks) {
+        this._scroller?.scrollAt(x, y, Math.max(1, Math.min(30, clicks)));
+    }
+
+    ShowScrollPill(x, y, width, height) {
+        this._scrollPill ??= new ScrollPill(() => this._dbus?.emit_signal('ScrollStopClicked', null));
+        this._scrollPill.placeOutside(x, y, width, height);
+    }
+
+    HideScrollPill() {
+        this._scrollPill?.destroy();
+        this._scrollPill = null;
     }
 
     // ---- draw on screen (draw.js) -------------------------------------------------

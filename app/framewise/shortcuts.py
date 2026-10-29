@@ -37,6 +37,8 @@ SHORTCUTS = [
      lambda: f"{_launcher()} dictate", "<Shift><Super>d"),
     ("framewise-draw", "Draw on screen (Framewise)", "Draw on screen",
      lambda: f"{_launcher()} draw", "<Shift><Super>a"),
+    ("framewise-scroll", "Scrolling screenshot (Framewise)", "Scrolling screenshot",
+     lambda: f"{_launcher()} scroll", ""),
     ("framewise-clipboard", "Clipboard history (Framewise)", "Clipboard history",
      lambda: f"{_launcher()} clipboard", "<Shift><Super>v"),
     ("framewise-camera", "Camera (Framewise)", "Toggle camera",

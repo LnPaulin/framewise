@@ -20,6 +20,7 @@ class ShellHelper:
         self.on_shot_action = None
         self.on_bubble_corner = None
         self.on_dictation_clicked = None
+        self.on_scroll_stop = None
         self._proxy = None
         try:
             self._proxy = Gio.DBusProxy.new_for_bus_sync(
@@ -106,6 +107,8 @@ class ShellHelper:
             self.on_bubble_corner(_params.unpack()[0])
         elif signal == "DictationClicked" and self.on_dictation_clicked:
             self.on_dictation_clicked()
+        elif signal == "ScrollStopClicked" and self.on_scroll_stop:
+            self.on_scroll_stop()
 
     def show_area(self, x, y, w, h):
         self._call("ShowArea", GLib.Variant("(iiii)", (int(x), int(y), int(w), int(h))))
@@ -185,6 +188,23 @@ class ShellHelper:
 
     def hide_shot(self):
         self._call("HideShot")
+
+    # Scrolling screenshots (1.13): the same extension version as dictation.
+
+    def screenshot_area(self, x, y, w, h, path):
+        """One area of the desktop as a PNG, without the pointer. True when saved."""
+        res = self._call_sync("ScreenshotArea", GLib.Variant("(iiiis)", (int(x), int(y), int(w), int(h),
+                                                                         str(path))), timeout=5000)
+        return bool(res and res[0])
+
+    def scroll_at(self, x, y, clicks):
+        self._call("ScrollAt", GLib.Variant("(iii)", (int(x), int(y), int(clicks))))
+
+    def show_scroll_pill(self, x, y, w, h):
+        self._call("ShowScrollPill", GLib.Variant("(iiii)", (int(x), int(y), int(w), int(h))))
+
+    def hide_scroll_pill(self):
+        self._call("HideScrollPill")
 
     def toggle_drawing(self):
         """Draw on screen: starts, or goes back to the apps keeping the drawings."""

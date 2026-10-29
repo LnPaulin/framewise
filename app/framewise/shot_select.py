@@ -30,6 +30,8 @@ LOUPE_ZOOM = 8
 HINT = ("Drag for an area  ·  Click a window  ·  Enter: whole screen  ·  "
         "R: last area  ·  Z: magnifier  ·  Esc: cancel")
 TEXT_HINT = "Drag over text or a QR code to copy  ·  Click a window  ·  R: last area  ·  Esc: cancel"
+SCROLL_HINT = ("Drag over the part that scrolls  ·  Click a window  ·  Enter: whole screen  ·  "
+               "Esc: cancel")
 PICK_HINT = "Click to copy the color  ·  Shift-click: rgb()  ·  Arrows: move by a pixel  ·  Esc: cancel"
 
 

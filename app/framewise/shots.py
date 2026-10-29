@@ -68,13 +68,15 @@ class ShotSession:
         self.last = None             # path of the latest screenshot
         self.text_mode = False       # copying the text in an area, not a picture
         self.pick_mode = False       # picking a color
+        self.scroll_mode = False     # a scrolling screenshot
         self.shell.on_shot_action = self._on_card
 
-    def start(self, whole_screen=False, delay=0, text=False, pick=False):
+    def start(self, whole_screen=False, delay=0, text=False, pick=False, scroll=False):
         if self.busy:
             return
         self.text_mode = text
         self.pick_mode = pick
+        self.scroll_mode = scroll
         if self.card:
             # A new screenshot replaces the card of the last one.
             self.card = False
@@ -130,11 +132,12 @@ class ShotSession:
         if whole_screen:
             self._chosen(still, ("screen", monitors()[0][1]), desktop_bounds())
             return
-        from .shot_select import TEXT_HINT
+        from .shot_select import SCROLL_HINT, TEXT_HINT
         bounds = desktop_bounds()
+        hint = TEXT_HINT if self.text_mode else SCROLL_HINT if self.scroll_mode else None
         ShotSelector(self.app, still, windows,
                      lambda result: self._chosen(still, result, bounds),
-                     hint=TEXT_HINT if self.text_mode else None, pick=self.pick_mode)
+                     hint=hint, pick=self.pick_mode)
 
     def _chosen(self, still, result, bounds):
         if result is None:
@@ -146,6 +149,11 @@ class ShotSession:
             still.unlink(missing_ok=True)
             colors.copy_and_notify(self.app, what, as_rgb=result[2])
             self._done()
+            return
+        if self.scroll_mode:
+            still.unlink(missing_ok=True)
+            rect = (what["x"], what["y"], what["w"], what["h"]) if kind == "window" else what
+            self._scroll(rect)
             return
         pix_w = GdkPixbuf.Pixbuf.get_file_info(str(still))[1]
         ratio = pix_w / bounds[2]
@@ -164,6 +172,26 @@ class ShotSession:
         at = (what["x"], what["y"]) if kind == "window" else what[:2]
         still.unlink(missing_ok=True)
         self._finished(dest, size, at)
+
+    def _scroll(self, rect):
+        from .scrollshot import ScrollCapture
+
+        def done(picture, note):
+            if picture is None:
+                self.app.notify("Scrolling screenshot", note or "Nothing was captured.")
+                self._done()
+                return
+            import cv2
+            dest = shot_destination()
+            if not cv2.imwrite(str(dest), picture):
+                self.app.notify("The screenshot couldn't be saved", str(dest))
+                self._done()
+                return
+            if note:
+                self.app.notify("Scrolling screenshot", note)
+            self._finished(dest, (picture.shape[1], picture.shape[0]), rect[:2])
+
+        ScrollCapture(self.shell, rect, done)
 
     def _read_text(self, still, result, ratio, bounds):
         kind, what = result
