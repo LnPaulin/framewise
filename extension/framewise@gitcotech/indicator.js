@@ -14,6 +14,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import * as audio from './audio.js';
 import {prettyKeys, shortcutFor} from './keys.js';
 
 const APP_ID = 'com.gitcotech.Framewise';
@@ -57,6 +58,10 @@ class FramewiseIndicator extends PanelMenu.Button {
             this.menu.addMenuItem(item);
             this._items[action] = {item, keys, label, shortcut};
         }
+        // Apps playing sound, each with the device it plays on (filled when the menu opens).
+        this._sound = new PopupMenu.PopupMenuSection();
+        this._soundRound = 0;
+        this.menu.addMenuItem(this._sound);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         const settings = new PopupMenu.PopupImageMenuItem('Settings', 'emblem-system-symbolic');
         settings.connect('activate', () => this._run('preferences'));
@@ -69,8 +74,10 @@ class FramewiseIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(this._quit);
 
         this.menu.connect('open-state-changed', (_m, open) => {
-            if (open)
+            if (open) {
                 this._refresh();
+                this._refreshSound();
+            }
         });
     }
 
@@ -85,6 +92,56 @@ class FramewiseIndicator extends PanelMenu.Button {
                 const open = global.display.list_all_windows().some(w => w.get_title() === CAMERA_TITLE);
                 item.label.text = open ? 'Hide Camera' : label;
             }
+        }
+    }
+
+    // ---- per-app sound output (audio.js) ---------------------------------------
+
+    async _refreshSound() {
+        const round = ++this._soundRound;
+        let state = null;
+        try {
+            state = audio.available() ? await audio.list() : null;
+        } catch (e) {
+            state = null;
+        }
+        if (round !== this._soundRound)
+            return;                     // the menu was opened again meanwhile
+        this._sound.removeAll();
+        if (!state || !state.apps.length || state.sinks.length < 2)
+            return;                     // nothing playing, or only one device
+        this._sound.addMenuItem(new PopupMenu.PopupSeparatorMenuItem('Sound Output'));
+        const chosen = audio.remembered();
+        for (const app of state.apps) {
+            const current = state.sinks.find(s => s.id === app.sinkId);
+            const item = new PopupMenu.PopupSubMenuMenuItem(app.name, true);
+            item.icon.gicon = Gio.ThemedIcon.new_with_default_fallbacks(app.icon || 'audio-speakers-symbolic');
+            const where = new St.Label({text: current?.label ?? '', style_class: 'framewise-menu-keys',
+                y_align: Clutter.ActorAlign.CENTER, opacity: 140});
+            item.insert_child_above(where, item.label);
+            for (const sink of state.sinks) {
+                const choice = new PopupMenu.PopupMenuItem(sink.label);
+                choice.setOrnament(sink.id === app.sinkId ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+                choice.connect('activate', () => this._sendApp(app, sink));
+                item.menu.addMenuItem(choice);
+            }
+            const follow = new PopupMenu.PopupMenuItem('Same as Other Apps');
+            follow.setOrnament(chosen[app.key] ? PopupMenu.Ornament.NONE : PopupMenu.Ornament.CHECK);
+            follow.connect('activate', () => this._sendApp(app, null));
+            item.menu.addMenuItem(follow);
+            this._sound.addMenuItem(item);
+        }
+    }
+
+    async _sendApp(app, sink) {
+        try {
+            if (sink)
+                await audio.moveApp(app, sink);
+            else
+                await audio.followDefault(app);
+            audio.remember(app.key, sink?.name ?? null);
+        } catch (e) {
+            Main.notify('Framewise', `Couldn't move ${app.name}'s sound: ${e.message}`);
         }
     }
 

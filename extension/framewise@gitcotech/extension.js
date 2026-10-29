@@ -25,6 +25,8 @@ import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
 import {DictationPill, Typist} from './dictation.js';
 import {Drawing} from './draw.js';
 import {ScrollPill, Scroller} from './scroll.js';
+import * as audio from './audio.js';
+import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 import {Indicator} from './indicator.js';
 import {BubblePlacement} from './placement.js';
 import {vbox} from './compat.js';
@@ -291,6 +293,20 @@ export default class FramewiseExtension extends Extension {
         this._drawing = new Drawing(this.path);
         this._scroller = new Scroller();
         this._scrollPill = null;
+        // Apps with a chosen sound device go back to it whenever they start
+        // playing (even while the Framewise app isn't running).
+        this._mixer = Volume.getMixerControl();
+        this._applyId = 0;
+        this._streamAddedId = this._mixer.connect('stream-added', () => {
+            if (this._applyId)
+                GLib.source_remove(this._applyId);
+            this._applyId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+                this._applyId = 0;
+                if (audio.available())
+                    audio.applyRemembered().catch(e => console.error(`framewise sound output: ${e}`));
+                return GLib.SOURCE_REMOVE;
+            });
+        });
         this._indicator = null;
         this._settingsFile = Gio.File.new_for_path(
             GLib.build_filenamev([GLib.get_user_config_dir(), 'framewise', 'settings.json']));
@@ -333,6 +349,12 @@ export default class FramewiseExtension extends Extension {
         this.HideScrollPill();
         this._scroller?.destroy();
         this._scroller = null;
+        if (this._streamAddedId)
+            this._mixer.disconnect(this._streamAddedId);
+        this._streamAddedId = 0;
+        if (this._applyId)
+            GLib.source_remove(this._applyId);
+        this._applyId = 0;
         this._clipHistory?.stop();
         this._clipHistory = null;
         this.HideShot();
