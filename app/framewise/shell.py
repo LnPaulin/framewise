@@ -206,6 +206,14 @@ class ShellHelper:
     def hide_scroll_pill(self):
         self._call("HideScrollPill")
 
+    def next_output(self):
+        """Everything plays on the next connected device (shown on screen)."""
+        self._call("NextOutput")
+
+    def toggle_mic(self):
+        """Mutes or unmutes the microphone (shown on screen)."""
+        self._call("ToggleMic")
+
     def toggle_drawing(self):
         """Draw on screen: starts, or goes back to the apps keeping the drawings."""
         self._call("ToggleDrawing")

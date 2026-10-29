@@ -118,6 +118,14 @@ class SettingsWindow(Adw.PreferencesWindow):
         sound.add(_switch("Microphone", "Recorded on its own track", "microphone"))
         page.add(sound)
 
+        audio_group = Adw.PreferencesGroup(
+            title="Sound",
+            description="The Framewise menu sets each app's volume and device. Shift+Super+O switches "
+                        "between speakers and headphones; Shift+Super+M turns the microphone on or off.")
+        audio_group.add(_switch("Lower the volume when headphones are unplugged",
+                                "So the speakers don't suddenly play loud", "sound_lower_on_unplug"))
+        page.add(audio_group)
+
         privacy = Adw.PreferencesGroup(title="Privacy")
         forget = Adw.ActionRow(title="Reset screen permissions",
                                subtitle="Ubuntu will ask again before recording each display")

@@ -37,6 +37,8 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise send [FILE...]
        framewise scroll
        framewise pdf [FILE...]
+       framewise output
+       framewise mic
        framewise clipboard
        framewise settings
        framewise camera
@@ -57,6 +59,8 @@ USAGE = """Usage: framewise              open the Framewise window
   send [FILE...]  send files, the clipboard or a screenshot to a phone on the same Wi-Fi
   scroll          a scrolling screenshot: a whole page, chat or document, scrolled for you
   pdf [FILE...]   merge, pick pages, compress or rotate PDFs; pictures to PDF and back
+  output          play everything on the next sound device (speakers, headphones...)
+  mic             mute or unmute the microphone
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -493,6 +497,8 @@ class Framewise(Adw.Application):
                          ("fit", self.show_fit),
                          ("send", self.show_send),
                          ("pdf", self.show_pdf),
+                         ("output", lambda: self._sound("next_output")),
+                         ("mic", lambda: self._sound("toggle_mic")),
                          ("scroll", lambda: self.take_screenshot(scroll=True)),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
@@ -567,7 +573,7 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "draw", "fit", "send", "scroll", "pdf", "edit", "record")
+                 "draw", "fit", "send", "scroll", "pdf", "output", "mic", "edit", "record")
         if args and args[0] not in known and not args[0].startswith("-"):
             # Files given on their own (Files' "Open With"): PDFs to PDF Tools,
             # videos to Make a Video Fit.
@@ -619,6 +625,9 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "scroll":
             self.take_screenshot(scroll=True)
+            return 0
+        if args[0] in ("output", "mic"):
+            self._sound("next_output" if args[0] == "output" else "toggle_mic")
             return 0
         if args[0] == "pdf":
             paths = [cmdline.create_file_for_arg(a).get_path() for a in args[1:]]
@@ -775,6 +784,13 @@ class Framewise(Adw.Application):
         for p in paths:
             if p not in docs:
                 self.show_fit(p)
+
+    def _sound(self, what):
+        shell = self.session.shell
+        if shell.has_dictation:         # came with the same extension version (1.13)
+            getattr(shell, what)()
+        else:
+            self.notify("Sound", "Log out and back in to finish updating Framewise first.")
 
     def show_pdf(self, paths=None):
         from .pdf_window import PdfWindow

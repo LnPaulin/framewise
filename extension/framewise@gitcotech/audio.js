@@ -91,7 +91,15 @@ export function parse(objects) {
         app.streams.push(o.id);
         app.sinkId ??= sinkOf(o.id);
     }
-    return {sinks, apps: [...apps.values()]};
+    // The device everything else plays on (WirePlumber's "default" metadata).
+    let defaultName = null;
+    for (const o of objects) {
+        if (o.type !== 'PipeWire:Interface:Metadata' || o.props?.['metadata.name'] !== 'default')
+            continue;
+        const entry = (o.metadata ?? []).find(m => m.key === 'default.audio.sink');
+        defaultName = entry?.value?.name ?? null;
+    }
+    return {sinks, apps: [...apps.values()], defaultName};
 }
 
 export async function list() {
@@ -102,6 +110,41 @@ export async function list() {
 export async function moveApp(app, sink) {
     for (const id of app.streams)
         await run(['pw-metadata', String(id), 'target.object', sink.name, 'Spa:String']);
+}
+
+// ---- volume ---------------------------------------------------------------------------
+
+export const MAX_VOLUME = 1.5;       // above 1 boosts a quiet app
+
+export async function getVolume(app) {
+    const out = await run(['wpctl', 'get-volume', String(app.streams[0])]);
+    const m = /Volume:\s*([\d.]+)/.exec(out);
+    return m ? parseFloat(m[1]) : 1;
+}
+
+export async function setVolume(app, volume) {
+    const v = Math.max(0, Math.min(MAX_VOLUME, volume)).toFixed(3);
+    for (const id of app.streams)
+        await run(['wpctl', 'set-volume', String(id), v]);
+}
+
+// ---- switching the output for everything ---------------------------------------------
+
+// Makes the next connected device the one everything plays on. Returns it.
+export async function nextOutput() {
+    const {sinks, defaultName} = await list();
+    const next = nextSink(sinks, defaultName);
+    if (next && next.name !== defaultName)
+        await run(['wpctl', 'set-default', String(next.id)]);
+    return next;
+}
+
+// The device after the current one, round and round (the first if none is current).
+export function nextSink(sinks, currentName) {
+    if (!sinks.length)
+        return null;
+    const i = sinks.findIndex(s => s.name === currentName);
+    return sinks[(i + 1) % sinks.length];
 }
 
 // Back to whatever device the system uses for everything else.
@@ -148,5 +191,5 @@ export async function applyRemembered() {
 }
 
 export function available() {
-    return !!GLib.find_program_in_path('pw-dump') && !!GLib.find_program_in_path('pw-metadata');
+    return ['pw-dump', 'pw-metadata', 'wpctl'].every(p => !!GLib.find_program_in_path(p));
 }

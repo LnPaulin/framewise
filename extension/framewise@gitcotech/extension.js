@@ -34,6 +34,7 @@ import {CallerGuard} from './guard.js';
 import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
+const SAFE_SPEAKER_VOLUME = 0.3;   // speakers after headphones are unplugged (of 100%)
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
 const VERSION = '1.13';
 const APP_ID = 'com.gitcotech.Framewise';
@@ -86,6 +87,10 @@ const IFACE = `
       <arg type="i" direction="out" name="height"/>
     </method>
     <method name="ToggleDrawing"/>
+    <method name="NextOutput"/>
+    <method name="ToggleMic">
+      <arg type="b" direction="out" name="muted"/>
+    </method>
     <method name="ScreenshotArea">
       <arg type="i" direction="in" name="x"/>
       <arg type="i" direction="in" name="y"/>
@@ -297,6 +302,15 @@ export default class FramewiseExtension extends Extension {
         // playing (even while the Framewise app isn't running).
         this._mixer = Volume.getMixerControl();
         this._applyId = 0;
+        // Headphones unplugged: the sound falls back to the speakers, which
+        // may be loud; their volume is lowered then (Settings can turn it off).
+        this._sinkIds = new Set();
+        this._defaultSinkId = null;
+        this._sinksId = this._mixer.connect('default-sink-changed', () => this._sinkChanged());
+        this._removedId = this._mixer.connect('stream-removed', (_c, id) => this._sinkRemoved(id));
+        this._previousDefault = null;
+        this._mixerStateId = this._mixer.connect('state-changed', () => this._rememberSinks());
+        this._rememberSinks();
         this._streamAddedId = this._mixer.connect('stream-added', () => {
             if (this._applyId)
                 GLib.source_remove(this._applyId);
@@ -349,9 +363,11 @@ export default class FramewiseExtension extends Extension {
         this.HideScrollPill();
         this._scroller?.destroy();
         this._scroller = null;
-        if (this._streamAddedId)
-            this._mixer.disconnect(this._streamAddedId);
-        this._streamAddedId = 0;
+        for (const id of [this._streamAddedId, this._sinksId, this._mixerStateId, this._removedId]) {
+            if (id)
+                this._mixer.disconnect(id);
+        }
+        this._streamAddedId = this._sinksId = this._mixerStateId = this._removedId = 0;
         if (this._applyId)
             GLib.source_remove(this._applyId);
         this._applyId = 0;
@@ -608,6 +624,86 @@ export default class FramewiseExtension extends Extension {
     HideScrollPill() {
         this._scrollPill?.destroy();
         this._scrollPill = null;
+    }
+
+    // ---- sound (audio.js) -------------------------------------------------------------
+
+    _setting(key, fallback) {
+        try {
+            const [, bytes] = this._settingsFile.load_contents(null);
+            const value = JSON.parse(new TextDecoder().decode(bytes))[key];
+            return value === undefined ? fallback : value;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    _osd(icon, label, level = null) {
+        Main.osdWindowManager.showAll(Gio.ThemedIcon.new(icon), label, level, level === null ? null : 1);
+    }
+
+    // The next connected output for everything (a shortcut), shown on screen.
+    NextOutput() {
+        if (!audio.available())
+            return;
+        audio.nextOutput().then(sink => {
+            if (sink)
+                this._osd(sink.name?.startsWith('bluez') ? 'audio-headphones-symbolic' : 'audio-speakers-symbolic',
+                    sink.label);
+        }).catch(e => console.error(`framewise next output: ${e}`));
+    }
+
+    // Mutes or unmutes the microphone in use, shown on screen.
+    ToggleMic() {
+        const source = this._mixer.get_default_source();
+        if (!source)
+            return false;
+        const muted = !source.is_muted;
+        source.change_is_muted(muted);
+        this._osd(muted ? 'microphone-sensitivity-muted-symbolic' : 'microphone-sensitivity-high-symbolic',
+            muted ? 'Microphone off' : 'Microphone on');
+        return muted;
+    }
+
+    _rememberSinks() {
+        this._sinkIds = new Set(this._mixer.get_sinks().map(s => s.id));
+        this._defaultSinkId = this._mixer.get_default_sink()?.id ?? null;
+    }
+
+    _sinkChanged() {
+        const before = this._defaultSinkId;
+        const sinks = new Set(this._mixer.get_sinks().map(s => s.id));
+        const unplugged = before !== null && !sinks.has(before);
+        this._sinkIds = sinks;
+        this._defaultSinkId = this._mixer.get_default_sink()?.id ?? null;
+        // The old device may be reported gone just after the switch.
+        this._previousDefault = unplugged ? null : {id: before, at: GLib.get_monotonic_time()};
+        if (unplugged)
+            this._lowerSpeakers();
+    }
+
+    _sinkRemoved(id) {
+        const prev = this._previousDefault;
+        if (prev && prev.id === id && GLib.get_monotonic_time() - prev.at < 3_000_000) {
+            this._previousDefault = null;
+            this._lowerSpeakers();
+        }
+    }
+
+    _lowerSpeakers() {
+        const now = this._mixer.get_default_sink();
+        if (!now || !this._setting('sound_lower_on_unplug', true))
+            return;
+        // Only when falling back to the computer's own speakers.
+        if (!(now.get_name() ?? '').startsWith('alsa_output.pci'))
+            return;
+        const max = this._mixer.get_vol_max_norm();
+        const safe = Math.round(max * SAFE_SPEAKER_VOLUME);
+        if (now.volume > safe && !now.is_muted) {
+            now.volume = safe;
+            now.push_volume();
+            this._osd('audio-volume-low-symbolic', 'Headphones gone: volume lowered', SAFE_SPEAKER_VOLUME);
+        }
     }
 
     // ---- draw on screen (draw.js) -------------------------------------------------

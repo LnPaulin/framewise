@@ -13,7 +13,7 @@ from . import state
 
 EXTENSION = "framewise@gitcotech"
 SETUP_VERSION = 1
-SHORTCUTS_VERSION = 5   # 2: color picker, 3: dictation, 4: draw, 5: scrolling screenshot (no keys)
+SHORTCUTS_VERSION = 6   # 2: color picker, 3: dictation, 4: draw, 5: scrolling screenshot (no keys), 6: sound
 
 
 def ensure():
