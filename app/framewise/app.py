@@ -34,6 +34,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise dictate
        framewise draw
        framewise fit [VIDEO]
+       framewise send [FILE...]
        framewise clipboard
        framewise settings
        framewise camera
@@ -51,6 +52,7 @@ USAGE = """Usage: framewise              open the Framewise window
   dictate         speak, and the words are typed where the cursor is (again: finish)
   draw            draw on the screen (again: back to the apps, drawings kept; Esc clears)
   fit [VIDEO]     make a copy of a video small enough to send (10 MB, 25 MB...)
+  send [FILE...]  send files, the clipboard or a screenshot to a phone on the same Wi-Fi
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -485,6 +487,7 @@ class Framewise(Adw.Application):
                          ("dictate", self.toggle_dictation),
                          ("draw", self.toggle_drawing),
                          ("fit", self.show_fit),
+                         ("send", self.show_send),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
             action = Gio.SimpleAction.new(name, None)
@@ -558,7 +561,7 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "draw", "fit", "edit", "record")
+                 "draw", "fit", "send", "edit", "record")
         if args and args[0] not in known and not args[0].startswith("-"):
             # A video given on its own (Files' "Open With"): make it fit.
             path = cmdline.create_file_for_arg(args[0]).get_path()
@@ -606,6 +609,10 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "draw":
             self.toggle_drawing()
+            return 0
+        if args[0] == "send":
+            paths = [cmdline.create_file_for_arg(a).get_path() for a in args[1:]]
+            self.show_send([p for p in paths if p])
             return 0
         if args[0] == "fit":
             path = cmdline.create_file_for_arg(args[1]).get_path() if len(args) > 1 else None
@@ -746,6 +753,10 @@ class Framewise(Adw.Application):
         for f in files:
             if f.get_path():
                 self.show_fit(f.get_path())
+
+    def show_send(self, paths=None):
+        from .send_window import SendWindow
+        SendWindow(self, paths).present()
 
     def show_fit(self, path=None):
         from .fit_window import FitWindow
