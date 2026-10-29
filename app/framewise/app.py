@@ -43,7 +43,7 @@ USAGE = """Usage: framewise              open the Framewise window
   screenshot      freeze the screen and choose an area, a window or a screen
   screenshot --screen       take the whole screen right away
   screenshot --delay 3      wait 3 seconds first
-  text            choose an area and copy the text in it
+  text            choose an area and copy the text (or QR code) in it
   color           click anywhere on the screen to copy its color (#RRGGBB)
   clipboard       open the clipboard history
   settings        open the settings window
@@ -465,6 +465,11 @@ class Framewise(Adw.Application):
         open_action = Gio.SimpleAction.new("open-file", GLib.VariantType.new("s"))
         open_action.connect("activate", self._open_file)
         self.add_action(open_action)
+        # A QR code's link (notification button). Anyone on the session bus can
+        # call actions, so only web links are ever opened.
+        link_action = Gio.SimpleAction.new("open-link", GLib.VariantType.new("s"))
+        link_action.connect("activate", self._open_link)
+        self.add_action(link_action)
         self.shots = None
         # Also what the top-bar menu and the icon's right-click menu run.
         for name, cb in (("preferences", self.show_settings), ("home", self.show_home),
@@ -844,6 +849,12 @@ class Framewise(Adw.Application):
                          Gio.Action.print_detailed_name("app.open-file", GLib.Variant("s", folder)))
         self.send_notification(None, n)
         print(f"{title}: {body}", file=sys.stderr, flush=True)
+
+    def _open_link(self, _action, param):
+        from . import qr
+        url = param.get_string().strip()
+        if qr.is_link(url):
+            Gio.AppInfo.launch_default_for_uri(url, None)
 
     OPENABLE = {".mp4", ".mkv", ".gif", ".png", ".jpg", ".jpeg", ".webp"}
 

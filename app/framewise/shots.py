@@ -166,13 +166,53 @@ class ShotSession:
         self._finished(dest, size, at)
 
     def _read_text(self, still, result, ratio, bounds):
-        import cairo
-        from . import ocr
         kind, what = result
         rect = (what["x"], what["y"], what["w"], what["h"]) if kind == "window" else what
         area = WORK_DIR / "text.png"
         crop_png(still, area, rect, ratio, bounds[:2])
         still.unlink(missing_ok=True)
+
+        # A QR code in the area wins: its content is what was wanted.
+        def find_codes():
+            from . import qr
+            try:
+                codes = qr.read_codes(area)
+            except Exception as e:  # noqa: BLE001 - never stop text capture
+                print("QR reading failed:", e, flush=True)
+                codes = []
+            GLib.idle_add(found, codes)
+
+        def found(codes):
+            if codes:
+                area.unlink(missing_ok=True)
+                self._copy_codes(codes)
+                self._done()
+            else:
+                self._ocr(area)
+            return False
+
+        import threading
+        threading.Thread(target=find_codes, daemon=True).start()
+
+    def _copy_codes(self, codes):
+        from . import ocr, qr
+        text = "\n".join(codes)
+        if not ocr.copy_text(text):
+            self.app.notify("Couldn't copy the QR code", "wl-copy (package wl-clipboard) is not installed")
+            return
+        title = "Copied QR code" if len(codes) == 1 else f"Copied {len(codes)} QR codes"
+        n = Gio.Notification.new(title)
+        n.set_body(ocr.preview(text))
+        links = [c.strip() for c in codes if qr.is_link(c)]
+        if links:
+            target = Gio.Action.print_detailed_name("app.open-link", GLib.Variant("s", links[0]))
+            n.add_button("Open link", target)
+            n.set_default_action(target)
+        self.app.send_notification("qr", n)
+
+    def _ocr(self, area):
+        import cairo
+        from . import ocr
         surface = cairo.ImageSurface.create_from_png(str(area))
         area.unlink(missing_ok=True)
 
