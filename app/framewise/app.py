@@ -32,6 +32,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise text
        framewise color
        framewise dictate
+       framewise draw
        framewise clipboard
        framewise settings
        framewise camera
@@ -47,6 +48,7 @@ USAGE = """Usage: framewise              open the Framewise window
   text            choose an area and copy the text (or QR code) in it
   color           click anywhere on the screen to copy its color (#RRGGBB)
   dictate         speak, and the words are typed where the cursor is (again: finish)
+  draw            draw on the screen (again: back to the apps, drawings kept; Esc clears)
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -479,6 +481,7 @@ class Framewise(Adw.Application):
                          ("text", lambda: self.take_screenshot(text=True)),
                          ("color", lambda: self.take_screenshot(pick=True)),
                          ("dictate", self.toggle_dictation),
+                         ("draw", self.toggle_drawing),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
             action = Gio.SimpleAction.new(name, None)
@@ -552,7 +555,7 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "edit", "record")
+                 "draw", "edit", "record")
         if args and args[0] not in known:
             cmdline.printerr_literal(f"Unknown command: {args[0]}\n\n{USAGE}")
             return 2
@@ -590,6 +593,9 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "dictate":
             self.toggle_dictation()
+            return 0
+        if args[0] == "draw":
+            self.toggle_drawing()
             return 0
         if args[0] == "edit" and len(args) > 1:
             path = cmdline.create_file_for_arg(args[1]).get_path()
@@ -719,6 +725,13 @@ class Framewise(Adw.Application):
         self.settings_window.present()
 
     # ---- screenshots -----------------------------------------------------------------
+
+    def toggle_drawing(self):
+        shell = self.session.shell
+        if shell.has_dictation:          # drawing came with the same extension version (1.13)
+            shell.toggle_drawing()
+        else:
+            self.notify("Draw on screen", "Log out and back in to finish updating Framewise first.")
 
     def toggle_dictation(self):
         if getattr(self, "dictation", None) is None:

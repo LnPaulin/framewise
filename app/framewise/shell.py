@@ -186,6 +186,10 @@ class ShellHelper:
     def hide_shot(self):
         self._call("HideShot")
 
+    def toggle_drawing(self):
+        """Draw on screen: starts, or goes back to the apps keeping the drawings."""
+        self._call("ToggleDrawing")
+
     # ---- dictation (1.13) ---------------------------------------------------------
 
     @property

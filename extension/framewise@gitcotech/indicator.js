@@ -26,6 +26,7 @@ const ITEMS = [
     ['text', 'Capture Text', 'edit-copy-symbolic', 'framewise-text'],
     ['color', 'Pick a Color', 'color-select-symbolic', 'framewise-color'],
     ['dictate', 'Dictate', 'audio-input-microphone-symbolic', 'framewise-dictate'],
+    ['draw', 'Draw on Screen', 'document-edit-symbolic', 'framewise-draw'],
     ['clipboard', 'Clipboard History', 'edit-paste-symbolic', 'framewise-clipboard'],
     ['camera', 'Show Camera', 'camera-web-symbolic', 'framewise-camera'],
 ];

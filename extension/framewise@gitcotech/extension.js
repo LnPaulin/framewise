@@ -23,6 +23,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {ClipboardHistory, ClipboardPicker} from './clipboard.js';
 import {DictationPill, Typist} from './dictation.js';
+import {Drawing} from './draw.js';
 import {Indicator} from './indicator.js';
 import {BubblePlacement} from './placement.js';
 import {vbox} from './compat.js';
@@ -81,6 +82,7 @@ const IFACE = `
       <arg type="i" direction="out" name="width"/>
       <arg type="i" direction="out" name="height"/>
     </method>
+    <method name="ToggleDrawing"/>
     <method name="ShowDictation">
       <arg type="s" direction="in" name="state"/>
     </method>
@@ -264,6 +266,7 @@ export default class FramewiseExtension extends Extension {
         this._clipPicker = new ClipboardPicker(this._clipHistory);
         this._typist = new Typist();
         this._dictation = null;
+        this._drawing = new Drawing(this.path);
         this._indicator = null;
         this._settingsFile = Gio.File.new_for_path(
             GLib.build_filenamev([GLib.get_user_config_dir(), 'framewise', 'settings.json']));
@@ -301,6 +304,8 @@ export default class FramewiseExtension extends Extension {
         this.HideDictation();
         this._typist?.destroy();
         this._typist = null;
+        this._drawing?.destroy();
+        this._drawing = null;
         this._clipHistory?.stop();
         this._clipHistory = null;
         this.HideShot();
@@ -332,6 +337,7 @@ export default class FramewiseExtension extends Extension {
             this.HideArea();
             this.HideShot();
             this.HideDictation();
+            this._drawing?.destroy();
             this._stopTrackTimer();
             this._typing?.stop();
         }
@@ -522,6 +528,13 @@ export default class FramewiseExtension extends Extension {
 
     UpdateControls(elapsed, paused) {
         this._controls?.update(elapsed, paused);
+    }
+
+    // ---- draw on screen (draw.js) -------------------------------------------------
+
+    ToggleDrawing() {
+        this._clipPicker?.close();
+        this._drawing?.toggle();
     }
 
     // ---- dictation ----------------------------------------------------------------

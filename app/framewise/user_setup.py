@@ -13,7 +13,7 @@ from . import state
 
 EXTENSION = "framewise@gitcotech"
 SETUP_VERSION = 1
-SHORTCUTS_VERSION = 3   # 2: color picker, 3: dictation; a new shortcut is set up once for everyone
+SHORTCUTS_VERSION = 4   # 2: color picker, 3: dictation, 4: draw; a new shortcut is set up once for everyone
 
 
 def ensure():

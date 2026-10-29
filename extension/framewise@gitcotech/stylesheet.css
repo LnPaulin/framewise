@@ -296,3 +296,71 @@
   color: rgba(255, 255, 255, 0.6);
   font-size: 9pt;
 }
+
+.framewise-draw-bar {
+  background-color: rgba(24, 24, 28, 0.94);
+  border-radius: 14px;
+  padding: 5px 8px;
+  spacing: 2px;
+  color: white;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.framewise-draw-tool {
+  border-radius: 9px;
+  padding: 7px;
+  color: white;
+}
+
+.framewise-draw-tool:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.framewise-draw-tool.active {
+  background-color: #3584e4;
+}
+
+.framewise-draw-color {
+  border-radius: 99px;
+  padding: 5px;
+}
+
+.framewise-draw-color:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.framewise-draw-color.active {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+.framewise-draw-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.framewise-draw-sep {
+  width: 1px;
+  margin: 6px 6px;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.framewise-draw-done {
+  border-radius: 9px;
+  padding: 5px 12px;
+  margin-left: 6px;
+  font-weight: bold;
+  color: white;
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.framewise-draw-done:hover {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+
+.framewise-draw-hint {
+  margin: 0 6px 0 10px;
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.55);
+}
