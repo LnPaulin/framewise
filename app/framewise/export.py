@@ -300,6 +300,17 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir):
         px = (px[0] & ~1, px[1] & ~1, px[2] & ~1, px[3] & ~1)
         plan["blurs"].append({**b, "px": px,
                               "sigma": compose.blur_sigma(px[2], px[3], b["strength"])})
+    plan["captions"] = None
+    from . import edit_model as em
+    if em.has_captions(doc):
+        # In a folder of its own with a plain name: ffmpeg reads the path
+        # inside the filter graph, where quotes and colons would need escaping.
+        import tempfile
+        from . import captions
+        folder = Path(tempfile.mkdtemp(prefix="framewise_captions_"))
+        path = folder / "captions.ass"
+        path.write_text(captions.to_ass(doc, *lay["canvas"]), encoding="utf-8")
+        plan["captions"] = str(path)
     return plan
 
 
@@ -530,6 +541,10 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
                          f"enable='between(t,{a:.3f},{b:.3f})':eof_action=pass[o{kind}{k}]")
             idx += 1
             cur = f"o{kind}{k}"
+    if plan.get("captions"):
+        # On the finished frame, still in recording time (before cuts are taken out).
+        parts.append(f"[{cur}]format=yuv420p,ass=filename='{plan['captions']}'[cap]")
+        cur = "cap"
     return ";".join(parts), cur, inputs
 
 
@@ -860,9 +875,12 @@ def save_async(take, dest, crop_fraction, on_done, doc=None, take_info=None,
     work = tmp.with_name(tmp.stem + ".parts")
     job = SaveJob(tmp)
     progress = on_progress or (lambda f: None)
+    plan = None
 
     def finish(ok, message):
         shutil.rmtree(work, ignore_errors=True)
+        if plan and plan.get("captions"):
+            shutil.rmtree(Path(plan["captions"]).parent, ignore_errors=True)
         if ok and not job.cancelled and tmp.exists() and tmp.stat().st_size > 0:
             os.replace(tmp, dest)
             on_done(True, str(dest))

@@ -14,7 +14,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Graphene", "1.0")
 gi.require_version("Gsk", "4.0")
-from gi.repository import Gdk, Graphene, Gsk, Gtk  # noqa: E402
+from gi.repository import Gdk, Graphene, Gsk, Gtk, Pango  # noqa: E402
 
 from . import compose, motion  # noqa: E402
 from . import pointer as ptr  # noqa: E402
@@ -56,6 +56,7 @@ class ZoomView(Gtk.Widget):
         self.overlays = []       # [(item, texture, (x, y, w, h), opacity, fade)]
         self.blurs = []          # doc blur items
         self.patch = None        # (texture, (x, y, w, h) fractions): the recording controls, covered
+        self.caption_doc = None  # the edit, for its captions (captions.py)
         self.pointer = None      # {"frames", "rings", "texture", "pad", "px", "rings_on"}
         # Editing modes
         self.picking = False     # choosing a zoom spot
@@ -99,6 +100,44 @@ class ZoomView(Gtk.Widget):
         self.layout, self.src_size = layout, src_size
         self.background, self.overlays, self.blurs = background, overlays, blurs
         self.queue_draw()
+
+    def set_captions(self, doc):
+        self.caption_doc = doc
+        self.queue_draw()
+
+    def _draw_caption(self, snap, t, fx, fy, fw, fh, k):
+        """The caption at t, drawn like the saved video's (captions.to_ass)."""
+        from . import captions
+        doc = self.caption_doc
+        c = captions.at(doc, t) if doc else None
+        if c is None:
+            return
+        W, H = self.layout["canvas"]
+        size = captions.font_px(doc, H) * k
+        pad = max(2, round(captions.font_px(doc, H) * 0.32)) * k
+        margin_h, margin_v = W * 0.08 * k, H * 0.06 * k
+        layout = self.create_pango_layout(c["text"])
+        font = Pango.FontDescription.from_string(f"{captions.FONT} Bold")
+        font.set_absolute_size(size * Pango.SCALE)
+        layout.set_font_description(font)
+        layout.set_width(int((fw - 2 * margin_h - 2 * pad) * Pango.SCALE))
+        layout.set_wrap(Pango.WrapMode.WORD)
+        layout.set_alignment(Pango.Alignment.CENTER)
+        _ink, logical = layout.get_pixel_extents()
+        tw, th = logical.width, logical.height
+        x = fx + (fw - tw) / 2
+        y = fy + fh - margin_v - th if doc["captions"]["position"] == "bottom" else fy + margin_v
+        box = Gsk.RoundedRect()
+        box.init_from_rect(_rect(x - pad, y - pad * 0.6, tw + 2 * pad, th + 1.2 * pad), pad * 0.6)
+        snap.push_rounded_clip(box)
+        snap.append_color(_rgba(0.08, 0.08, 0.09, 0.75), _rect(x - pad, y - pad * 0.6, tw + 2 * pad, th + 1.2 * pad))
+        snap.pop()
+        point = Graphene.Point()
+        point.init(x - logical.x, y)
+        snap.save()
+        snap.translate(point)
+        snap.append_layout(layout, _rgba(1, 1, 1))
+        snap.restore()
 
     def set_patch(self, texture, rect):
         """Covers the recording controls with the clean picture of that spot
@@ -269,6 +308,7 @@ class ZoomView(Gtk.Widget):
             snap.push_opacity(alpha)
             snap.append_texture(texture, _rect(fx + ox * k, fy + oy * k, ow * k, oh * k))
             snap.pop()
+        self._draw_caption(snap, t, fx, fy, fw, fh, k)
 
     def _draw_pointer(self, snap, t, box, view):
         """The drawn pointer and click ring, in the recording's own space, so

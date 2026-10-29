@@ -42,6 +42,9 @@ def new_document(duration):
         "texts": [],    # {id, start, end, text, size, color, anchor}
         "images": [],   # {id, start, end, file, size, opacity, anchor}
         "blurs": [],    # {id, start, end, rect: [x, y, w, h], strength}
+        # Captions from the speech, in recording time (captions.py). Burned
+        # into the video when on; also saved as .srt on request.
+        "captions": {"on": False, "items": [], "size": "medium", "position": "bottom"},
         # The drawn pointer. "drawn" is set when the recording left the real
         # pointer out (the editor then always has to draw one back in).
         "pointer": {"drawn": False, "show": True, "size": 1.0, "smoothing": "smooth",
@@ -204,6 +207,16 @@ def normalize(doc, duration):
         b["rect"] = [x, y, max(0.01, min(1 - x, w)), max(0.01, min(1 - y, h))]
         b["strength"] = max(1, min(5, int(b["strength"])))
 
+    cap = {**new_document(duration)["captions"], **(doc.get("captions") or {})}
+    cap["on"] = bool(cap["on"])
+    cap["size"] = cap["size"] if cap["size"] in CAPTION_SIZES else "medium"
+    cap["position"] = cap["position"] if cap["position"] in ("bottom", "top") else "bottom"
+    cap["items"] = [c for c in timed(cap.get("items"), {"text": ""}) if str(c["text"]).strip()]
+    for c in cap["items"]:
+        c["text"] = " ".join(str(c["text"]).split())
+        c.setdefault("id", new_id())
+    doc["captions"] = cap
+
     ptr = {**new_document(duration)["pointer"], **(doc.get("pointer") or {})}
     ptr["drawn"], ptr["show"], ptr["rings"] = bool(ptr["drawn"]), bool(ptr["show"]), bool(ptr["rings"])
     ptr["size"] = max(0.5, min(2.0, float(ptr["size"])))
@@ -335,6 +348,7 @@ def is_unedited(doc, duration):
     """True when saving the recording as is would give the same video."""
     return (doc["trim"][0] <= 0.01 and doc["trim"][1] >= duration - 0.01 and not doc["cuts"]
             and not doc.get("speedups")
+            and not has_captions(doc)
             and not has_zoom(doc) and not (doc.get("denoise") or {}).get("mic")
             and not needs_compose(doc)
             and normalize_export(doc.get("export"))["speed"] == 1.0
@@ -399,8 +413,18 @@ def has_zoom(doc):
     return bool(z.get("enabled") and z.get("segments"))
 
 
+CAPTION_SIZES = {"small": 0.042, "medium": 0.052, "large": 0.066}   # of the picture's height
+
+
+def has_captions(doc):
+    cap = doc.get("captions") or {}
+    return bool(cap.get("on") and cap.get("items"))
+
+
 def needs_compose(doc):
     """True when the picture itself is changed: background, shape or overlays."""
+    if has_captions(doc):
+        return True
     style = doc.get("style") or {}
     if (doc.get("pointer") or {}).get("drawn"):
         return True  # the pointer has to be drawn back in (or is hidden on purpose)

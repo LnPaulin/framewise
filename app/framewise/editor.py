@@ -24,6 +24,7 @@ from . import silence  # noqa: E402
 from . import speech  # noqa: E402
 from . import motion  # noqa: E402
 from .filmstrip import Filmstrip, ZoomLane, make_thumbnails  # noqa: E402
+from .editor_captions import CaptionsMixin  # noqa: E402
 from .editor_export import ExportMixin, copy_file_to_clipboard, format_length  # noqa: E402
 from .editor_style import StyleMixin  # noqa: E402
 from .zoomview import ZoomView  # noqa: E402
@@ -50,7 +51,7 @@ def probe_duration(path):
         return 0.0
 
 
-class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
+class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
     def __init__(self, app, take_dir, on_closed=None, on_saved=None):
         super().__init__(application=app, title="Recording")
         self.on_saved = on_saved      # called after each successful save
@@ -197,6 +198,7 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
         transport.append(self._build_pointer_button())
         transport.append(self._build_zoom_button())
         transport.append(self._build_silence_button())
+        transport.append(self._build_captions_button())
         transport.append(self.cut_btn)
 
         # Timeline
@@ -591,6 +593,7 @@ class Editor(ExportMixin, StyleMixin, Adw.ApplicationWindow):
 
     def _update_views(self):
         """The preview's finished frame and zoom (see StyleMixin._update_scene)."""
+        self.picture.set_captions(self.doc)
         self._update_scene()
 
     # ---- marked suggestions (pauses, filler words) -----------------------------------
