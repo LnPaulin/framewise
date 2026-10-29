@@ -31,9 +31,10 @@ TOOLS = [
     ("color", "Color Picker", "Copy the color of any pixel", "color-select-symbolic", "framewise-color"),
     ("fit", "Make a Video Fit", "A copy small enough to send", "video-x-generic-symbolic", None),
     ("send", "Send to Phone", "Through a QR code, on the same Wi-Fi", "phone-symbolic", None),
+    ("pdf", "PDF Tools", "Merge, pick pages, compress, rotate", "x-office-document-symbolic", None),
 ]
 # Tools that open a window of their own: the home window stays.
-OWN_WINDOW = {"clipboard", "fit", "send"}
+OWN_WINDOW = {"clipboard", "fit", "send", "pdf"}
 
 CSS = """
 .fw-home-tool { padding: 14px 16px; border-radius: 14px; }

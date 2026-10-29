@@ -3,15 +3,15 @@ Type=Application
 Name=Framewise
 GenericName=Screen Recorder and Screenshots
 Comment=Record the screen, take and mark up screenshots, copy text, clipboard history
-Keywords=record;screencast;screenshot;capture;ocr;text;clipboard;history;camera;color;picker;eyedropper;dictation;speech;voice;draw;annotate;pen;spotlight;compress;shrink;video;phone;send;share;qr;scrolling;long;page;
+Keywords=record;screencast;screenshot;capture;ocr;text;clipboard;history;camera;color;picker;eyedropper;dictation;speech;voice;draw;annotate;pen;spotlight;compress;shrink;video;phone;send;share;qr;scrolling;long;page;pdf;merge;split;compress;
 Exec=framewise %F
 Icon=com.gitcotech.Framewise
 Terminal=false
 Categories=AudioVideo;Video;Recorder;Graphics;Utility;
 StartupNotify=true
 DBusActivatable=true
-MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/3gpp;video/x-m4v;
-Actions=record;screenshot;scroll;text;color;dictate;draw;fit;send;clipboard;camera;preferences;
+MimeType=application/pdf;video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/3gpp;video/x-m4v;
+Actions=record;screenshot;scroll;text;color;dictate;draw;fit;send;pdf;clipboard;camera;preferences;
 
 [Desktop Action record]
 Name=Record Screen
@@ -48,6 +48,10 @@ Exec=framewise fit
 [Desktop Action send]
 Name=Send to Phone
 Exec=framewise send
+
+[Desktop Action pdf]
+Name=PDF Tools
+Exec=framewise pdf
 
 [Desktop Action clipboard]
 Name=Clipboard History

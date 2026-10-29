@@ -36,6 +36,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise fit [VIDEO]
        framewise send [FILE...]
        framewise scroll
+       framewise pdf [FILE...]
        framewise clipboard
        framewise settings
        framewise camera
@@ -55,6 +56,7 @@ USAGE = """Usage: framewise              open the Framewise window
   fit [VIDEO]     make a copy of a video small enough to send (10 MB, 25 MB...)
   send [FILE...]  send files, the clipboard or a screenshot to a phone on the same Wi-Fi
   scroll          a scrolling screenshot: a whole page, chat or document, scrolled for you
+  pdf [FILE...]   merge, pick pages, compress or rotate PDFs; pictures to PDF and back
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -490,6 +492,7 @@ class Framewise(Adw.Application):
                          ("draw", self.toggle_drawing),
                          ("fit", self.show_fit),
                          ("send", self.show_send),
+                         ("pdf", self.show_pdf),
                          ("scroll", lambda: self.take_screenshot(scroll=True)),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
@@ -564,13 +567,14 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "draw", "fit", "send", "scroll", "edit", "record")
+                 "draw", "fit", "send", "scroll", "pdf", "edit", "record")
         if args and args[0] not in known and not args[0].startswith("-"):
-            # A video given on its own (Files' "Open With"): make it fit.
-            path = cmdline.create_file_for_arg(args[0]).get_path()
-            if path and Path(path).is_file():
+            # Files given on their own (Files' "Open With"): PDFs to PDF Tools,
+            # videos to Make a Video Fit.
+            paths = [cmdline.create_file_for_arg(a).get_path() for a in args]
+            if all(p and Path(p).is_file() for p in paths):
                 self.stay_running()
-                self.show_fit(path)
+                self.open_files(paths)
                 return 0
         if args and args[0] not in known:
             cmdline.printerr_literal(f"Unknown command: {args[0]}\n\n{USAGE}")
@@ -615,6 +619,10 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "scroll":
             self.take_screenshot(scroll=True)
+            return 0
+        if args[0] == "pdf":
+            paths = [cmdline.create_file_for_arg(a).get_path() for a in args[1:]]
+            self.show_pdf([p for p in paths if p])
             return 0
         if args[0] == "send":
             paths = [cmdline.create_file_for_arg(a).get_path() for a in args[1:]]
@@ -754,11 +762,23 @@ class Framewise(Adw.Application):
     # ---- screenshots -----------------------------------------------------------------
 
     def do_open(self, files, _n, _hint):
-        # Files' "Open With Framewise" on a video (D-Bus activation).
+        # Files' "Open With Framewise" (D-Bus activation).
         self.stay_running()
-        for f in files:
-            if f.get_path():
-                self.show_fit(f.get_path())
+        self.open_files([f.get_path() for f in files if f.get_path()])
+
+    def open_files(self, paths):
+        """PDFs (and pictures) go to PDF Tools, together; each video to Make a Video Fit."""
+        from . import pdf
+        docs = [p for p in paths if pdf.is_pdf(p) or pdf.is_image(p)]
+        if docs:
+            self.show_pdf(docs)
+        for p in paths:
+            if p not in docs:
+                self.show_fit(p)
+
+    def show_pdf(self, paths=None):
+        from .pdf_window import PdfWindow
+        PdfWindow(self, paths).present()
 
     def show_send(self, paths=None):
         from .send_window import SendWindow
