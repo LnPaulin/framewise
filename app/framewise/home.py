@@ -23,7 +23,15 @@ TOOLS = [
      "framewise-clipboard"),
     ("camera", "Camera", "Your webcam in a floating bubble, or as a mirror", "camera-web-symbolic",
      "framewise-camera"),
+    ("dictate", "Dictation", "Speak, and the words are typed", "audio-input-microphone-symbolic",
+     "framewise-dictate"),
+    ("draw", "Draw on Screen", "Pen, arrows and a spotlight over anything", "document-edit-symbolic",
+     "framewise-draw"),
+    ("color", "Color Picker", "Copy the color of any pixel", "color-select-symbolic", "framewise-color"),
+    ("fit", "Make a Video Fit", "A copy small enough to send", "video-x-generic-symbolic", None),
 ]
+# Tools that open a window of their own: the home window stays.
+OWN_WINDOW = {"clipboard", "fit"}
 
 CSS = """
 .fw-home-tool { padding: 14px 16px; border-radius: 14px; }
@@ -43,7 +51,7 @@ def credit_label():
 
 class Home(Adw.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app, title="Framewise", resizable=False, default_width=440)
+        super().__init__(application=app, title="Framewise", resizable=False, default_width=640)
         self.app = app
         provider = Gtk.CssProvider()
         provider.load_from_string(CSS)
@@ -68,9 +76,10 @@ class Home(Adw.ApplicationWindow):
                              css_classes=["dim-label", "fw-home-note"])
             body.append(note)
 
-        tools = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=14)
-        for action, title, description, icon, sid in TOOLS:
-            tools.append(self._tool(action, title, description, icon, sid))
+        # Two columns, so every tool fits without scrolling.
+        tools = Gtk.Grid(column_spacing=8, row_spacing=8, column_homogeneous=True, margin_top=14)
+        for i, (action, title, description, icon, sid) in enumerate(TOOLS):
+            tools.attach(self._tool(action, title, description, icon, sid), i % 2, i // 2, 1, 1)
         body.append(tools)
 
         view = Adw.ToolbarView()
@@ -88,14 +97,14 @@ class Home(Adw.ApplicationWindow):
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, valign=Gtk.Align.CENTER)
         text.append(Gtk.Label(label=title, xalign=0, css_classes=["fw-home-title"]))
         row.append(text)
-        accel = shortcuts.binding(sid)
+        accel = shortcuts.binding(sid) if sid else ""
         if accel:
             row.append(Gtk.ShortcutLabel(accelerator=accel, valign=Gtk.Align.CENTER,
                                          css_classes=["fw-home-keys"]))
         button = Gtk.Button(child=row, css_classes=["fw-home-tool", "card"])
 
         def clicked(_b):
-            if action == "clipboard":
+            if action in OWN_WINDOW:
                 # Opens over this window; nothing to hide.
                 self.app.activate_action(action, None)
                 return

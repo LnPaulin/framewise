@@ -3,14 +3,15 @@ Type=Application
 Name=Framewise
 GenericName=Screen Recorder and Screenshots
 Comment=Record the screen, take and mark up screenshots, copy text, clipboard history
-Keywords=record;screencast;screenshot;capture;ocr;text;clipboard;history;camera;color;picker;eyedropper;dictation;speech;voice;draw;annotate;pen;spotlight;
-Exec=framewise
+Keywords=record;screencast;screenshot;capture;ocr;text;clipboard;history;camera;color;picker;eyedropper;dictation;speech;voice;draw;annotate;pen;spotlight;compress;shrink;video;
+Exec=framewise %F
 Icon=com.gitcotech.Framewise
 Terminal=false
 Categories=AudioVideo;Video;Recorder;Graphics;Utility;
 StartupNotify=true
 DBusActivatable=true
-Actions=record;screenshot;text;color;dictate;draw;clipboard;camera;preferences;
+MimeType=video/mp4;video/x-matroska;video/webm;video/quicktime;video/x-msvideo;video/mpeg;video/3gpp;video/x-m4v;
+Actions=record;screenshot;text;color;dictate;draw;fit;clipboard;camera;preferences;
 
 [Desktop Action record]
 Name=Record Screen
@@ -35,6 +36,10 @@ Exec=framewise dictate
 [Desktop Action draw]
 Name=Draw on Screen
 Exec=framewise draw
+
+[Desktop Action fit]
+Name=Make a Video Fit
+Exec=framewise fit
 
 [Desktop Action clipboard]
 Name=Clipboard History

@@ -722,7 +722,12 @@ def fit_plan(duration, size, fps, has_audio, target_mb, bitrate_scale=1.0):
     audio = FIT_AUDIO_BPS if has_audio else 0
     available = int(target_mb * 1_000_000 * 8 * 0.94 / duration) - audio
     ceiling = int(w * h * out_fps * 0.085)
-    video = int(min(available, max(800_000, ceiling)) * min(1.0, bitrate_scale))
+    if bitrate_scale > 1:
+        # A second try after a copy came out well under the size (screen
+        # recordings compress better than the plan assumes): spend more.
+        video = int(min(available * bitrate_scale, max(800_000, ceiling)))
+    else:
+        video = int(min(available, max(800_000, ceiling)) * bitrate_scale)
     if video < FIT_MIN_VIDEO_BPS:
         return None
     sharp_pixels = video / (out_fps * 0.055)

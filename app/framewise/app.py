@@ -33,6 +33,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise color
        framewise dictate
        framewise draw
+       framewise fit [VIDEO]
        framewise clipboard
        framewise settings
        framewise camera
@@ -49,6 +50,7 @@ USAGE = """Usage: framewise              open the Framewise window
   color           click anywhere on the screen to copy its color (#RRGGBB)
   dictate         speak, and the words are typed where the cursor is (again: finish)
   draw            draw on the screen (again: back to the apps, drawings kept; Esc clears)
+  fit [VIDEO]     make a copy of a video small enough to send (10 MB, 25 MB...)
   clipboard       open the clipboard history
   settings        open the settings window
   camera          show or hide the camera bubble (also handy as a mirror)
@@ -460,7 +462,7 @@ class Session:
 class Framewise(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID,
-                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE | Gio.ApplicationFlags.HANDLES_OPEN)
         self.session = None
         self.chooser = None
         self.bubble = None
@@ -482,6 +484,7 @@ class Framewise(Adw.Application):
                          ("color", lambda: self.take_screenshot(pick=True)),
                          ("dictate", self.toggle_dictation),
                          ("draw", self.toggle_drawing),
+                         ("fit", self.show_fit),
                          ("clipboard", self.show_clipboard), ("camera", self.toggle_camera),
                          ("quit-app", self.quit_app)):
             action = Gio.SimpleAction.new(name, None)
@@ -555,7 +558,14 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "draw", "edit", "record")
+                 "draw", "fit", "edit", "record")
+        if args and args[0] not in known and not args[0].startswith("-"):
+            # A video given on its own (Files' "Open With"): make it fit.
+            path = cmdline.create_file_for_arg(args[0]).get_path()
+            if path and Path(path).is_file():
+                self.stay_running()
+                self.show_fit(path)
+                return 0
         if args and args[0] not in known:
             cmdline.printerr_literal(f"Unknown command: {args[0]}\n\n{USAGE}")
             return 2
@@ -596,6 +606,10 @@ class Framewise(Adw.Application):
             return 0
         if args[0] == "draw":
             self.toggle_drawing()
+            return 0
+        if args[0] == "fit":
+            path = cmdline.create_file_for_arg(args[1]).get_path() if len(args) > 1 else None
+            self.show_fit(path)
             return 0
         if args[0] == "edit" and len(args) > 1:
             path = cmdline.create_file_for_arg(args[1]).get_path()
@@ -725,6 +739,18 @@ class Framewise(Adw.Application):
         self.settings_window.present()
 
     # ---- screenshots -----------------------------------------------------------------
+
+    def do_open(self, files, _n, _hint):
+        # Files' "Open With Framewise" on a video (D-Bus activation).
+        self.stay_running()
+        for f in files:
+            if f.get_path():
+                self.show_fit(f.get_path())
+
+    def show_fit(self, path=None):
+        from .fit_window import FitWindow
+        window = FitWindow(self, path)
+        window.present()
 
     def toggle_drawing(self):
         shell = self.session.shell
