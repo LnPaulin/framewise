@@ -11,5 +11,6 @@ dist/
 
 # Private notes and personal files: kept on this computer, never published.
 /PLAN.md
+/TESTPLAN.md
 /docs/SPEC.md
 /Screenshot*.png
