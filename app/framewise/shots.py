@@ -67,12 +67,14 @@ class ShotSession:
         self.card = False            # the preview card is showing (app kept running)
         self.last = None             # path of the latest screenshot
         self.text_mode = False       # copying the text in an area, not a picture
+        self.pick_mode = False       # picking a color
         self.shell.on_shot_action = self._on_card
 
-    def start(self, whole_screen=False, delay=0, text=False):
+    def start(self, whole_screen=False, delay=0, text=False, pick=False):
         if self.busy:
             return
         self.text_mode = text
+        self.pick_mode = pick
         if self.card:
             # A new screenshot replaces the card of the last one.
             self.card = False
@@ -97,7 +99,8 @@ class ShotSession:
     def _freeze(self, whole_screen):
         still = WORK_DIR / "desktop.png"
         still.unlink(missing_ok=True)
-        cursor = bool(settings.get("shot_pointer"))
+        # The pointer would hide the very pixel being picked.
+        cursor = bool(settings.get("shot_pointer")) and not self.pick_mode
         if self.shell.has_screenshots:
             windows = self.shell.list_windows()
             if self.shell.screenshot(still, cursor):
@@ -131,13 +134,19 @@ class ShotSession:
         bounds = desktop_bounds()
         ShotSelector(self.app, still, windows,
                      lambda result: self._chosen(still, result, bounds),
-                     hint=TEXT_HINT if self.text_mode else None)
+                     hint=TEXT_HINT if self.text_mode else None, pick=self.pick_mode)
 
     def _chosen(self, still, result, bounds):
         if result is None:
             self._done()
             return
         kind, what = result
+        if kind == "color":
+            from . import colors
+            still.unlink(missing_ok=True)
+            colors.copy_and_notify(self.app, what, as_rgb=result[2])
+            self._done()
+            return
         pix_w = GdkPixbuf.Pixbuf.get_file_info(str(still))[1]
         ratio = pix_w / bounds[2]
         if self.text_mode:

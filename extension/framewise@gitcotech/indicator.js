@@ -24,6 +24,7 @@ const ITEMS = [
     ['record', 'Record Screen', 'media-record-symbolic', 'framewise-record'],
     ['screenshot', 'Take Screenshot', 'applets-screenshooter-symbolic', 'framewise-screenshot'],
     ['text', 'Capture Text', 'edit-copy-symbolic', 'framewise-text'],
+    ['color', 'Pick a Color', 'color-select-symbolic', 'framewise-color'],
     ['clipboard', 'Clipboard History', 'edit-paste-symbolic', 'framewise-clipboard'],
     ['camera', 'Show Camera', 'camera-web-symbolic', 'framewise-camera'],
 ];

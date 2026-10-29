@@ -30,6 +30,7 @@ LOUPE_ZOOM = 8
 HINT = ("Drag for an area  ·  Click a window  ·  Enter: whole screen  ·  "
         "R: last area  ·  Z: magnifier  ·  Esc: cancel")
 TEXT_HINT = "Drag over the text to copy  ·  Click a window  ·  R: last area  ·  Esc: cancel"
+PICK_HINT = "Click to copy the color  ·  Shift-click: rgb()  ·  Arrows: move by a pixel  ·  Esc: cancel"
 
 
 def _rect(x, y, w, h):
@@ -73,13 +74,15 @@ def drag_rect(start, end):
 
 class ShotSelector:
     """on_done(result): ("area", rect) / ("window", window) / ("screen", rect) / None.
+    With pick=True (color picker): ("color", (r, g, b), as_rgb) / None.
 
     Rectangles are in desktop coordinates (logical pixels).
     """
 
-    def __init__(self, app, still_path, windows, on_done, hint=None):
+    def __init__(self, app, still_path, windows, on_done, hint=None, pick=False):
         self.on_done = on_done
-        self.hint = hint or HINT
+        self.pick = pick
+        self.hint = PICK_HINT if pick else (hint or HINT)
         self.windows = windows
         self.finished = False
         self.pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(still_path))
@@ -90,7 +93,7 @@ class ShotSelector:
         self.pointer = None          # desktop coordinates
         self.start = None
         self.rect = None             # desktop coordinates, while dragging
-        self.loupe = settings.get("shot_loupe")
+        self.loupe = True if pick else settings.get("shot_loupe")
         self.layers = []
         for monitor, geo in monitors():
             self.layers.append(_Layer(self, app, monitor, geo))
@@ -110,8 +113,17 @@ class ShotSelector:
         for layer in self.layers:
             layer.canvas.queue_draw()
 
+    def pixel_at(self, point):
+        """The still's pixel under a desktop point (screenshot pixels)."""
+        k = self.ratio
+        return (int((point[0] - self.origin[0]) * k), int((point[1] - self.origin[1]) * k))
+
+    def color_under_pointer(self):
+        from .colors import color_at
+        return color_at(self.pixbuf, *self.pixel_at(self.pointer)) if self.pointer else None
+
     def hovered_window(self):
-        if self.pointer is None or self.start is not None:
+        if self.pick or self.pointer is None or self.start is not None:
             return None
         return window_at(self.windows, *self.pointer)
 
@@ -134,6 +146,8 @@ class ShotSelector:
     # ---- input -------------------------------------------------------------------------
 
     def press(self, point):
+        if self.pick:
+            return
         self.start = point
         self.rect = None
 
@@ -144,7 +158,11 @@ class ShotSelector:
         self.rect = drag_rect(self.start, point)
         self.redraw()
 
-    def release(self, point):
+    def release(self, point, shift=False):
+        if self.pick:
+            self.pointer = point
+            self.finish(("color", self.color_under_pointer(), shift))
+            return
         if self.start is None:
             return
         start, self.start = self.start, None
@@ -160,9 +178,11 @@ class ShotSelector:
         settings.set("shot_last_area", [x, y, w, h])
         self.finish(("area", (x, y, w, h)))
 
-    def key(self, keyval):
+    def key(self, keyval, shift=False):
         if keyval == Gdk.KEY_Escape:
             self.finish(None)
+        elif self.pick:
+            return self._pick_key(keyval, shift)
         elif keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
             self.finish(("screen", self.screen_at(self.pointer)))
         elif keyval in (Gdk.KEY_r, Gdk.KEY_R):
@@ -176,6 +196,21 @@ class ShotSelector:
         else:
             return False
         return True
+
+
+    def _pick_key(self, keyval, shift):
+        """Enter picks; arrow keys move the pointer by one screen pixel."""
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            if self.pointer:
+                self.finish(("color", self.color_under_pointer(), shift))
+            return True
+        moves = {Gdk.KEY_Left: (-1, 0), Gdk.KEY_Right: (1, 0), Gdk.KEY_Up: (0, -1), Gdk.KEY_Down: (0, 1)}
+        if keyval in moves and self.pointer:
+            dx, dy = moves[keyval]
+            self.pointer = (self.pointer[0] + dx / self.ratio, self.pointer[1] + dy / self.ratio)
+            self.redraw()
+            return True
+        return False
 
 
 class _Layer:
@@ -199,7 +234,8 @@ class _Layer:
         drag.connect("drag-end", self._drag_end)
         self.canvas.add_controller(drag)
         keys = Gtk.EventControllerKey()
-        keys.connect("key-pressed", lambda _c, kv, _code, _st: selector.key(kv))
+        keys.connect("key-pressed", lambda _c, kv, _code, st: selector.key(
+            kv, bool(st & Gdk.ModifierType.SHIFT_MASK)))
         self.win.add_controller(keys)
         self.win.present()
 
@@ -219,7 +255,8 @@ class _Layer:
 
     def _drag_end(self, gesture, dx, dy):
         ok, sx, sy = gesture.get_start_point()
-        self.sel.release(self.to_desktop(sx + dx, sy + dy))
+        shift = bool(gesture.get_current_event_state() & Gdk.ModifierType.SHIFT_MASK)
+        self.sel.release(self.to_desktop(sx + dx, sy + dy), shift)
 
 
 class _Canvas(Gtk.Widget):
@@ -244,7 +281,8 @@ class _Canvas(Gtk.Widget):
             k = sel.ratio
             self._badge(snap, f"{round(w * k)} × {round(h * k)}", x, y + h + 10, W, H)
         else:
-            snap.append_color(DIM, _rect(0, 0, W, H))
+            if not sel.pick:      # picking a color: the real colors, not darkened
+                snap.append_color(DIM, _rect(0, 0, W, H))
             win = sel.hovered_window()
             if win:
                 x, y = layer.to_local(win["x"], win["y"])
@@ -278,18 +316,36 @@ class _Canvas(Gtk.Widget):
         snap.append_color(Gdk.RGBA(red=1, green=1, blue=1, alpha=0.9), _rect(lx, ly + c - zoom / 2, size, 1))
         snap.pop()
         snap.append_border(box, [2] * 4, [WHITE] * 4)
-        k = self.layer.sel.ratio
-        gx, gy = self.layer.sel.pointer
-        self._badge(snap, f"{round((gx - self.layer.sel.origin[0]) * k)}, "
-                          f"{round((gy - self.layer.sel.origin[1]) * k)}",
+        sel = self.layer.sel
+        if sel.pick:
+            from .colors import hex_code
+            rgb = sel.color_under_pointer()
+            # The picked pixel's color, with a swatch beside its code.
+            bx, by, bh = self._badge(snap, hex_code(rgb), lx + size / 2, ly + size + 18, W, H,
+                                     center=True, lead=20)
+            top = by + (bh - 14) / 2
+            dot = Gsk.RoundedRect()
+            dot.init_from_rect(_rect(bx + 9, top, 14, 14), 4)
+            snap.push_rounded_clip(dot)
+            snap.append_color(Gdk.RGBA(red=rgb[0] / 255, green=rgb[1] / 255, blue=rgb[2] / 255, alpha=1),
+                              _rect(bx + 9, top, 14, 14))
+            snap.pop()
+            snap.append_border(dot, [1] * 4, [WHITE] * 4)
+            return
+        k = sel.ratio
+        gx, gy = sel.pointer
+        self._badge(snap, f"{round((gx - sel.origin[0]) * k)}, "
+                          f"{round((gy - sel.origin[1]) * k)}",
                     lx + size / 2, ly + size + 18, W, H, center=True)
 
-    def _badge(self, snap, text, x, y, width, height, center=False):
+    def _badge(self, snap, text, x, y, width, height, center=False, lead=0):
+        """A dark rounded label; lead: room left of the text (for a swatch).
+        Returns where it was drawn: (x, y, height)."""
         layout = self.create_pango_layout(None)
         layout.set_markup(f"<b>{GLib.markup_escape_text(text)}</b>", -1)
         _ink, logical = layout.get_pixel_extents()
         pad_x, pad_y = 10, 6
-        bw, bh = logical.width + 2 * pad_x, logical.height + 2 * pad_y
+        bw, bh = logical.width + 2 * pad_x + lead, logical.height + 2 * pad_y
         if center:
             x, y = x - bw / 2, y - bh / 2
         x = min(max(6, x), width - bw - 6)
@@ -300,8 +356,9 @@ class _Canvas(Gtk.Widget):
         snap.append_color(BADGE_BG, _rect(x, y, bw, bh))
         snap.pop()
         point = Graphene.Point()
-        point.init(x + pad_x, y + pad_y)
+        point.init(x + pad_x + lead, y + pad_y)
         snap.save()
         snap.translate(point)
         snap.append_layout(layout, WHITE)
         snap.restore()
+        return x, y, bh

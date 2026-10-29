@@ -30,7 +30,7 @@ import {TypingTracker} from './typing.js';
 
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.12';
+const VERSION = '1.13';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');

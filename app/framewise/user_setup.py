@@ -13,6 +13,7 @@ from . import state
 
 EXTENSION = "framewise@gitcotech"
 SETUP_VERSION = 1
+SHORTCUTS_VERSION = 2   # 2: the color picker; a new shortcut is set up once for everyone
 
 
 def ensure():
@@ -20,6 +21,7 @@ def ensure():
     launcher = shortcuts._launcher()
     done = state.get("user_setup") or {}
     if done.get("version") == SETUP_VERSION and done.get("launcher") == launcher:
+        _new_shortcuts()
         return False
     try:
         shortcuts.setup()
@@ -29,7 +31,20 @@ def ensure():
     except GLib.Error:
         return False
     state.set("user_setup", {"version": SETUP_VERSION, "launcher": launcher})
+    state.set("shortcuts_version", SHORTCUTS_VERSION)
     return True
+
+
+def _new_shortcuts():
+    """Shortcuts added in an update get their keys once (unless the keys are
+    taken); the ones already set up keep theirs, even when turned off."""
+    if (state.get("shortcuts_version") or 1) >= SHORTCUTS_VERSION:
+        return
+    try:
+        shortcuts.setup()
+    except GLib.Error:
+        return
+    state.set("shortcuts_version", SHORTCUTS_VERSION)
 
 
 def _refresh_autostart():

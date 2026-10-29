@@ -31,6 +31,8 @@ SHORTCUTS = [
      lambda: f"{_launcher()} screenshot", "<Shift><Super>s"),
     ("framewise-text", "Text capture (Framewise)", "Capture text",
      lambda: f"{_launcher()} text", "<Shift><Super>t"),
+    ("framewise-color", "Color picker (Framewise)", "Pick a color",
+     lambda: f"{_launcher()} color", "<Shift><Super>p"),
     ("framewise-clipboard", "Clipboard history (Framewise)", "Clipboard history",
      lambda: f"{_launcher()} clipboard", "<Shift><Super>v"),
     ("framewise-camera", "Camera (Framewise)", "Toggle camera",

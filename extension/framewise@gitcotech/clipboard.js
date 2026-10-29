@@ -36,7 +36,7 @@ const APP_PATH = '/com/gitcotech/Framewise';
 // Framewise's capture shortcuts, which still work while this list is open
 // (it holds the keyboard, so GNOME doesn't run shortcuts): [shortcut id, app action].
 const CAPTURE_KEYS = [['framewise-screenshot', 'screenshot'], ['framewise-print', 'screenshot'],
-    ['framewise-text', 'text']];
+    ['framewise-text', 'text'], ['framewise-color', 'color']];
 const MAX_IMAGE_BYTES = 40 * 1024 * 1024;
 const MAX_ROWS = 300;                   // shown at once; search reaches the rest
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/tiff'];
