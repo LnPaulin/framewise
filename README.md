@@ -3,7 +3,7 @@
 [![release](https://img.shields.io/github/v/release/LnPaulin/framewise?label=release)](https://github.com/LnPaulin/framewise/releases/latest) [![tests](https://img.shields.io/github/actions/workflow/status/LnPaulin/framewise/tests.yml?branch=main&label=tests&logo=github)](https://github.com/LnPaulin/framewise/actions/workflows/tests.yml) [![Ubuntu 24.04+ · GNOME 46–50](https://img.shields.io/badge/Ubuntu-24.04%2B%20%C2%B7%20GNOME%2046%E2%80%9350-E95420?logo=ubuntu&logoColor=white)](#install) [![license](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 
 Screen recording, screenshots, text from the screen and clipboard history for
-Ubuntu (GNOME). Brought to you by [@gitcotech](https://t.me/gitcotech).
+Ubuntu (GNOME).
 
 <a href="https://buymeacoffee.com/framewise"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="180" alt="Buy Me a Coffee"></a>
 
@@ -148,7 +148,6 @@ checkout instead (`scripts/uninstall-dev.sh` undoes that).
 
 Framewise is free and open source, and it will stay that way. If it saves you
 time, a [coffee](https://buymeacoffee.com/framewise) helps keep it going.
-Updates are posted on [Telegram](https://t.me/gitcotech).
 
 ## Licence
 
