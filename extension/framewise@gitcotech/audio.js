@@ -131,9 +131,10 @@ export async function setVolume(app, volume) {
 // ---- switching the output for everything ---------------------------------------------
 
 // Makes the next connected device the one everything plays on. Returns it.
-export async function nextOutput() {
+// skip: node names left out (unticked in Settings: a screen without speakers).
+export async function nextOutput(skip = []) {
     const {sinks, defaultName} = await list();
-    const next = nextSink(sinks, defaultName);
+    const next = nextSink(sinks.filter(s => !skip.includes(s.name) || s.name === defaultName), defaultName);
     if (next && next.name !== defaultName)
         await run(['wpctl', 'set-default', String(next.id)]);
     return next;
@@ -145,6 +146,19 @@ export function nextSink(sinks, currentName) {
         return null;
     const i = sinks.findIndex(s => s.name === currentName);
     return sinks[(i + 1) % sinks.length];
+}
+
+// The device to go back to when the one everything played on is gone:
+// the latest one used before it that is still connected, or null.
+// history: [{id, name}] latest last; present: node names connected now.
+export function fallbackFor(history, goneId, present) {
+    const at = history.findIndex(d => d.id === goneId);
+    const earlier = (at < 0 ? history : history.slice(0, at)).filter(d => d.id !== goneId);
+    for (let i = earlier.length - 1; i >= 0; i--) {
+        if (present.includes(earlier[i].name))
+            return earlier[i].name;
+    }
+    return null;
 }
 
 // Back to whatever device the system uses for everything else.

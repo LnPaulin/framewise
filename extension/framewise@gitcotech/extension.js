@@ -309,12 +309,14 @@ export default class FramewiseExtension extends Extension {
         this._sinksId = this._mixer.connect('default-sink-changed', () => this._sinkChanged());
         this._removedId = this._mixer.connect('stream-removed', (_c, id) => this._sinkRemoved(id));
         this._previousDefault = null;
+        this._defaults = [];
+        this._restoring = false;
         this._mixerStateId = this._mixer.connect('state-changed', () => this._rememberSinks());
         this._rememberSinks();
         this._streamAddedId = this._mixer.connect('stream-added', () => {
             if (this._applyId)
                 GLib.source_remove(this._applyId);
-            this._applyId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 400, () => {
+            this._applyId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
                 this._applyId = 0;
                 if (audio.available())
                     audio.applyRemembered().catch(e => console.error(`framewise sound output: ${e}`));
@@ -646,7 +648,7 @@ export default class FramewiseExtension extends Extension {
     NextOutput() {
         if (!audio.available())
             return;
-        audio.nextOutput().then(sink => {
+        audio.nextOutput(this._setting('sound_skip_outputs', [])).then(sink => {
             if (sink)
                 this._osd(sink.name?.startsWith('bluez') ? 'audio-headphones-symbolic' : 'audio-speakers-symbolic',
                     sink.label);
@@ -667,7 +669,19 @@ export default class FramewiseExtension extends Extension {
 
     _rememberSinks() {
         this._sinkIds = new Set(this._mixer.get_sinks().map(s => s.id));
-        this._defaultSinkId = this._mixer.get_default_sink()?.id ?? null;
+        const now = this._mixer.get_default_sink();
+        this._defaultSinkId = now?.id ?? null;
+        this._noteDefault(now);
+    }
+
+    // The devices used for everything, latest last, so unplugging headphones
+    // can go back to the one used before them.
+    _noteDefault(sink) {
+        if (!sink)
+            return;
+        this._defaults = (this._defaults ?? []).filter(d => d.id !== sink.id);
+        this._defaults.push({id: sink.id, name: sink.get_name()});
+        this._defaults = this._defaults.slice(-10);
     }
 
     _sinkChanged() {
@@ -675,33 +689,55 @@ export default class FramewiseExtension extends Extension {
         const sinks = new Set(this._mixer.get_sinks().map(s => s.id));
         const unplugged = before !== null && !sinks.has(before);
         this._sinkIds = sinks;
-        this._defaultSinkId = this._mixer.get_default_sink()?.id ?? null;
+        const now = this._mixer.get_default_sink();
+        this._defaultSinkId = now?.id ?? null;
         // The old device may be reported gone just after the switch.
         this._previousDefault = unplugged ? null : {id: before, at: GLib.get_monotonic_time()};
         if (unplugged)
-            this._lowerSpeakers();
+            this._fellBack(before);
+        else if (!this._restoring)
+            this._noteDefault(now);
     }
 
     _sinkRemoved(id) {
         const prev = this._previousDefault;
         if (prev && prev.id === id && GLib.get_monotonic_time() - prev.at < 3_000_000) {
             this._previousDefault = null;
-            this._lowerSpeakers();
+            this._fellBack(id);
         }
     }
 
-    _lowerSpeakers() {
+    // The device everything played on is gone (headphones turned off or
+    // unplugged). The system picks another one by itself, often not the one
+    // used before (an HDMI screen); go back to that one, quieter.
+    _fellBack(goneId) {
+        const history = this._defaults ?? [];
+        const present = new Map(this._mixer.get_sinks().map(s => [s.get_name(), s]));
+        const target = present.get(audio.fallbackFor(history, goneId, [...present.keys()])) ?? null;
+        this._defaults = history.filter(d => d.id !== goneId);
         const now = this._mixer.get_default_sink();
-        if (!now || !this._setting('sound_lower_on_unplug', true))
-            return;
-        // Only when falling back to the computer's own speakers.
-        if (!(now.get_name() ?? '').startsWith('alsa_output.pci'))
+        if (target && now && target.id !== now.id) {
+            this._restoring = true;
+            this._mixer.set_default_sink(target);
+            this._restoring = false;
+            // The system's own switch may land after ours: put ours back once.
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, () => {
+                if (this._mixer.get_default_sink()?.id !== target.id && present.has(target.get_name()))
+                    this._mixer.set_default_sink(target);
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        this._lowerVolume(target ?? now);
+    }
+
+    _lowerVolume(sink) {
+        if (!sink || !this._setting('sound_lower_on_unplug', true))
             return;
         const max = this._mixer.get_vol_max_norm();
         const safe = Math.round(max * SAFE_SPEAKER_VOLUME);
-        if (now.volume > safe && !now.is_muted) {
-            now.volume = safe;
-            now.push_volume();
+        if (sink.volume > safe && !sink.is_muted) {
+            sink.volume = safe;
+            sink.push_volume();
             this._osd('audio-volume-low-symbolic', 'Headphones gone: volume lowered', SAFE_SPEAKER_VOLUME);
         }
     }

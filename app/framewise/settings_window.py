@@ -123,7 +123,9 @@ class SettingsWindow(Adw.PreferencesWindow):
             description="The Framewise menu sets each app's volume and device. Shift+Super+O switches "
                         "between speakers and headphones; Shift+Super+M turns the microphone on or off.")
         audio_group.add(_switch("Lower the volume when headphones are unplugged",
-                                "So the speakers don't suddenly play loud", "sound_lower_on_unplug"))
+                                "Sound goes back to the device used before them, quieter",
+                                "sound_lower_on_unplug"))
+        audio_group.add(self._next_output_row())
         page.add(audio_group)
 
         privacy = Adw.PreferencesGroup(title="Privacy")
@@ -341,6 +343,28 @@ class SettingsWindow(Adw.PreferencesWindow):
         return group
 
     # ---- pieces ----------------------------------------------------------------------------
+
+    def _next_output_row(self):
+        """Which devices Shift+Super+O goes through: a screen whose speakers
+        aren't used (or that has none) can be left out."""
+        from .sound_outputs import outputs
+        row = Adw.ExpanderRow(title="Devices for Shift+Super+O",
+                              subtitle="Untick a screen or device you never listen on")
+        found = outputs()
+        if not found:
+            row.add_row(Adw.ActionRow(title="No sound devices found"))
+        for name, label in found:
+            item = Adw.SwitchRow(title=label)
+            item.set_active(name not in (settings.get("sound_skip_outputs") or []))
+
+            def changed(r, _p, name=name):
+                skip = [n for n in (settings.get("sound_skip_outputs") or []) if n != name]
+                if not r.get_active():
+                    skip.append(name)
+                settings.set("sound_skip_outputs", skip)
+            item.connect("notify::active", changed)
+            row.add_row(item)
+        return row
 
     def _folder_row(self, title, key):
         row = Adw.ActionRow(title=title, subtitle=_home_relative(settings.get(key)))
