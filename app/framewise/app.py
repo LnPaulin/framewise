@@ -980,5 +980,10 @@ class Framewise(Adw.Application):
 
 
 def main(argv=None):
+    # If Framewise ever stops responding, `pkill -USR1 -f "^python3 -P -m framewise"`
+    # writes where each thread is to the system log (journalctl --user).
+    import faulthandler
+    import signal
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     app = Framewise()
     return app.run(argv if argv is not None else sys.argv)
