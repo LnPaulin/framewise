@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -104,3 +105,55 @@ class StitchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SmoothShell:
+    """A pretend screen showing a page that scrolls smoothly, the way a
+    browser does: a scroll keeps moving the page for a few captures."""
+
+    def __init__(self, p, view=600, per_click=40, frames=5):
+        self.p, self.view, self.per_click, self.frames = p, view, per_click, frames
+        self.offset, self.target = 0, 0
+        self.on_scroll_stop = None
+        self.max_offset = p.shape[0] - view
+
+    def show_scroll_pill(self, *a):
+        pass
+
+    def hide_scroll_pill(self):
+        pass
+
+    def scroll_at(self, x, y, clicks):
+        self.target = min(self.max_offset, self.target + clicks * self.per_click)
+
+    def screenshot_area(self, x, y, w, h, path):
+        import cv2
+        if self.offset < self.target:      # still gliding
+            self.offset = min(self.target, self.offset + max(1, (self.target - self.offset) // 2 + 3))
+        cv2.imwrite(str(path), viewport(self.p, self.offset, self.view))
+        return True
+
+
+class ScrollCaptureTests(unittest.TestCase):
+    def run_capture(self, shell):
+        from gi.repository import GLib
+
+        from framewise import scrollshot
+        loop, out = GLib.MainLoop(), {}
+
+        def done(picture, note):
+            out["picture"], out["note"] = picture, note
+            loop.quit()
+        with mock.patch.object(scrollshot, "POLL_MS", 1):
+            scrollshot.ScrollCapture(shell, (0, 0, 500, shell.view), done)
+            GLib.timeout_add_seconds(60, loop.quit)
+            loop.run()
+        return out
+
+    def test_smooth_scrolling_page_is_captured_to_the_end(self):
+        # 2g.2: a browser page used to stop after one scroll.
+        p = page(height=4000)
+        out = self.run_capture(SmoothShell(p))
+        self.assertEqual(out["note"], "")
+        self.assertEqual(out["picture"].shape[0], p.shape[0])
+        self.assertTrue(np.array_equal(out["picture"], p))
