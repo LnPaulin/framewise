@@ -57,6 +57,35 @@ class ReadTests(unittest.TestCase):
             self.skipTest("this OpenCV finds one code at a time")
         self.assertEqual(found, ["left", "right"])
 
+    def zoomed_out(self, text, pixels):
+        """A code drawn the way a zoomed-out page shows it: smoothed, about
+        `pixels` screen pixels per square."""
+        c = code(text, module=16)
+        side = int(c.shape[0] / 16 * pixels)
+        return cv2.resize(c, (side, side), interpolation=cv2.INTER_AREA)
+
+    def test_tiny_code_in_a_large_area(self):
+        # 2b.3: a page zoomed out until the code is tiny, in a big selection.
+        page = np.full((800, 1280, 3), 255, np.uint8)
+        for y in range(16, 800, 22):
+            cv2.putText(page, "Lorem ipsum dolor sit amet " * 3, (10, y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.45, (60, 60, 60), 1, cv2.LINE_AA)
+        c = self.zoomed_out("https://example.com/a", 1.4)
+        page[100:100 + c.shape[0], 100:100 + c.shape[1]] = c
+        self.assertEqual(qr.read_codes(self.save(page)), ["https://example.com/a"])
+
+    def test_three_small_codes(self):
+        # 2b.4: every code is found, even when one reader alone misses some.
+        if not hasattr(cv2, "wechat_qrcode_WeChatQRCode"):
+            self.skipTest("needs OpenCV's WeChat reader")
+        page = np.full((800, 1280, 3), 255, np.uint8)
+        for text, px, (x, y) in [("WIFI:S:home;T:WPA;P:pw;;", 3, (50, 50)),
+                                 ("https://example.com/b", 2, (600, 300)), ("hello", 5, (900, 500))]:
+            c = self.zoomed_out(text, px)
+            page[y:y + c.shape[0], x:x + c.shape[1]] = c
+        self.assertEqual(qr.read_codes(self.save(page)),
+                         ["WIFI:S:home;T:WPA;P:pw;;", "https://example.com/b", "hello"])
+
     def test_no_code(self):
         page = np.full((300, 400, 3), 255, np.uint8)
         cv2.putText(page, "Just text", (20, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
