@@ -74,6 +74,9 @@ class CaptionsMixin:
 
         popover = Gtk.Popover(child=box)
         popover.connect("show", lambda *_: self._refresh_captions())
+        undo_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        undo_keys.connect("key-pressed", self._on_undo_key)
+        popover.add_controller(undo_keys)
         self.captions_popover = popover
         button = Gtk.MenuButton(popover=popover, tooltip_text="Captions")
         button.set_child(self._icon_label("media-view-subtitles-symbolic", "Captions"))

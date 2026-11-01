@@ -1093,12 +1093,15 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
             return False
         focus = self.get_focus()
         entry = focus.get_ancestor(Gtk.Entry) if focus else None
-        if entry is None:
+        # Keys in a popover (the captions panel) never reach the window's own handler.
+        in_popover = _c.get_widget() is not self
+        if entry is None and not in_popover:
             return False                      # the editor's own handler does it
         # A text box with its own typing not yet saved undoes that typing first.
-        committed = getattr(entry, "committed_text", None)
-        if committed is None or entry.get_text() != committed:
-            return False
+        if entry is not None:
+            committed = getattr(entry, "committed_text", None)
+            if committed is None or entry.get_text() != committed:
+                return False
         # Done after this key press: it redraws the caption lines, and the text
         # box handling the key mustn't be destroyed while it does.
         redo = keyval in (Gdk.KEY_y, Gdk.KEY_Y) or bool(state & Gdk.ModifierType.SHIFT_MASK)
