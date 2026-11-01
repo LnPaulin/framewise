@@ -282,6 +282,11 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self._on_key)
         self.add_controller(keys)
+        # Ctrl+Z / Ctrl+Y reach the editor first, so they undo edits even with
+        # the cursor in a caption line (which would keep them for itself).
+        undo_keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.CAPTURE)
+        undo_keys.connect("key-pressed", self._on_undo_key)
+        self.add_controller(undo_keys)
 
     # ---- silences ---------------------------------------------------------------
 
@@ -1083,6 +1088,24 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         box.append(Gtk.Label(label=text))
         return box
 
+    def _on_undo_key(self, _c, keyval, _code, state):
+        if not state & Gdk.ModifierType.CONTROL_MASK or keyval not in (Gdk.KEY_z, Gdk.KEY_Z, Gdk.KEY_y, Gdk.KEY_Y):
+            return False
+        focus = self.get_focus()
+        entry = focus.get_ancestor(Gtk.Entry) if focus else None
+        if entry is None:
+            return False                      # the editor's own handler does it
+        # A text box with its own typing not yet saved undoes that typing first.
+        committed = getattr(entry, "committed_text", None)
+        if committed is None or entry.get_text() != committed:
+            return False
+        # Done after this key press: it redraws the caption lines, and the text
+        # box handling the key mustn't be destroyed while it does.
+        redo = keyval in (Gdk.KEY_y, Gdk.KEY_Y) or bool(state & Gdk.ModifierType.SHIFT_MASK)
+        self.set_focus(None)
+        GLib.idle_add(lambda: (self.redo() if redo else self.undo(), False)[1])
+        return True
+
     # ---- edits ----------------------------------------------------------------------
 
     def _commit(self, new_doc, remember=True, gain_track=None):
@@ -1112,6 +1135,7 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
             self._commit(self.undo_stack.pop(), remember=False)
             self.strip.clear_selection()
             self._refresh()
+            self._refresh_captions()          # the caption lines shown in the panel
 
     def redo(self):
         if self.redo_stack:
@@ -1119,6 +1143,7 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
             self._commit(self.redo_stack.pop(), remember=False)
             self.strip.clear_selection()
             self._refresh()
+            self._refresh_captions()          # the caption lines shown in the panel
 
     def _on_trim(self, start, end, done):
         if not done:

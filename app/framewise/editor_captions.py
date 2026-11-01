@@ -105,6 +105,10 @@ class CaptionsMixin:
         self._fill_caption_rows()
 
     def _fill_caption_rows(self):
+        # A text box that has the cursor can't be destroyed safely: move it off first.
+        focus = self.get_focus()
+        if focus is not None and focus.is_ancestor(self.cap_list):
+            self.set_focus(None)
         while (row := self.cap_list.get_first_child()) is not None:
             self.cap_list.remove(row)
         for item in self.doc["captions"]["items"]:
@@ -113,9 +117,10 @@ class CaptionsMixin:
                             tooltip_text="Jump here")
             at.connect("clicked", lambda *_a, t=item["start"]: self.player.seek(t + 0.01))
             entry = Gtk.Entry(text=item["text"], hexpand=True)
-            entry.connect("activate", lambda e, i=item["id"]: self._caption_text(i, e.get_text()))
+            entry.committed_text = item["text"]     # what the editor has (see the editor's Ctrl+Z)
+            entry.connect("activate", lambda e, i=item["id"]: self._caption_entry_done(i, e))
             focus = Gtk.EventControllerFocus()
-            focus.connect("leave", lambda _c, e=entry, i=item["id"]: self._caption_text(i, e.get_text()))
+            focus.connect("leave", lambda _c, e=entry, i=item["id"]: self._caption_entry_done(i, e))
             entry.add_controller(focus)
             remove = Gtk.Button(icon_name="user-trash-symbolic", css_classes=["flat"], tooltip_text="Remove")
             remove.connect("clicked", lambda *_a, i=item["id"]: self._caption_remove(i))
@@ -132,6 +137,14 @@ class CaptionsMixin:
         doc = em.clone(self.doc)
         doc["captions"].update(changes)
         self._commit(doc)
+
+    def _caption_entry_done(self, item_id, entry):
+        # Only new typing: leaving a line that's being removed (undo redraws
+        # the lines) mustn't write its old text back.
+        if entry.get_text() == entry.committed_text:
+            return
+        entry.committed_text = entry.get_text()
+        self._caption_text(item_id, entry.get_text())
 
     def _caption_text(self, item_id, text):
         doc = em.clone(self.doc)
