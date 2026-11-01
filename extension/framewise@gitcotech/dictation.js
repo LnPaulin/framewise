@@ -39,6 +39,7 @@ class FramewiseDictationPill extends St.Button {
     }
 
     setState(state) {
+        this.dictationState = state;
         this._dot.remove_all_transitions();
         this._dot.opacity = 255;
         if (state === 'writing') {

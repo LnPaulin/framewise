@@ -445,7 +445,8 @@ export default class FramewiseExtension extends Extension {
         this._cursorTracker = global.backend.get_cursor_tracker();
         this._trackTimer = GLib.timeout_add(GLib.PRIORITY_HIGH, 16, () => {
             const [x, y, mods] = global.get_pointer();
-            const down = (mods & Clutter.ModifierType.BUTTON1_MASK) ? 1 : 0;
+            // Strokes drawn on the screen aren't clicks: no zoom on them.
+            const down = (mods & Clutter.ModifierType.BUTTON1_MASK) && !this._drawing?.drawing ? 1 : 0;
             // GNOME hides the pointer while you type; the drawn one follows suit.
             const visible = this._cursorTracker?.get_pointer_visible() ? 1 : 0;
             this._track.push([GLib.get_monotonic_time(), Math.round(x), Math.round(y), down, visible]);
@@ -752,9 +753,23 @@ export default class FramewiseExtension extends Extension {
     // ---- dictation ----------------------------------------------------------------
 
     ShowDictation(state) {
+        const writing = state === 'writing';
+        const before = this._dictation?.dictationState ?? null;
         if (!this._dictation)
             this._dictation = new DictationPill(() => this._dbus?.emit_signal('DictationClicked', null));
-        this._dictation.setState(state === 'writing' ? 'writing' : 'listening');
+        this._dictation.setState(writing ? 'writing' : 'listening');
+        // A short sound when listening starts and when it stops (GNOME's
+        // alert sounds setting turns these off too).
+        if (!writing && before !== 'listening')
+            this._sound('device-added', 'Dictation listening');
+        else if (writing && before === 'listening')
+            this._sound('device-removed', 'Dictation stopped listening');
+    }
+
+    _sound(name, description) {
+        try {
+            global.display.get_sound_player().play_from_theme(name, description, null);
+        } catch (e) {}
     }
 
     HideDictation() {
