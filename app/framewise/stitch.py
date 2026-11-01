@@ -13,9 +13,12 @@ scroll and kept only once: the header at the top, the footer at the end.
 
 import numpy as np
 
-ROW_SAME = 2.0        # mean grey difference under which a row "didn't change"
+PIXEL_SAME = 24       # a row "didn't change" when no pixel in it differs by more than this
+                      # (an average would miss a few changed letters among identical icons)
 MATCH_MIN = 0.92      # how alike the strip must be where it is found
-CHECK_MAX = 10.0      # mean grey difference allowed over the whole overlap
+CHECK_MAX = 10.0      # mean grey difference allowed in a row of the overlap...
+ROWS_AGREE = 0.8      # ...in this share of its rows (the rest may be covered by something floating)
+STRIPS = 6            # strips of the new picture tried for lining it up
 MAX_STATIC = 0.4      # header and footer each take at most this share of the height
 MAX_HEIGHT = 30000    # pixels; longer pages stop here
 
@@ -45,6 +48,7 @@ class Stitcher:
             top, bottom = static_bands(self.prev, grey)
             if top + bottom >= h - 8:
                 return "end"                      # nothing scrolled
+            top, bottom = _real_bands(self.prev, grey, top, bottom)
             self.top, self.bottom = top, bottom
             self.parts.append(self.last[: h - bottom])
         move = find_move(self.prev, grey, self.top, self.bottom)
@@ -78,7 +82,7 @@ def static_bands(a, b):
     """Heights of the rows at the top and at the bottom that are the same in
     both pictures (header and footer), each at most MAX_STATIC of the height."""
     h = a.shape[0]
-    same = np.abs(a - b).mean(axis=1) < ROW_SAME
+    same = np.abs(a - b).max(axis=1) <= PIXEL_SAME
     limit = int(h * MAX_STATIC)
     top = 0
     while top < limit and same[top]:
@@ -86,6 +90,23 @@ def static_bands(a, b):
     bottom = 0
     while bottom < limit and same[h - 1 - bottom]:
         bottom += 1
+    return top, bottom
+
+
+def _real_bands(prev, cur, top, bottom):
+    """Header and footer that really stay put. Rows can look the same in both
+    pictures by chance too: a grid of identical icons scrolled by exactly one
+    row. Those rows also match the page having moved, which a real header
+    (or footer) doesn't, so they are counted as scrolling instead."""
+    h = prev.shape[0]
+    move = find_move(prev, cur, top, bottom)
+    if not move:
+        return top, bottom
+    if top and move + top <= h and np.abs(cur[:top] - prev[move: move + top]).max() <= PIXEL_SAME:
+        top = 0
+    if bottom and h - bottom - move >= 0 and \
+            np.abs(prev[h - bottom:] - cur[h - bottom - move: h - move]).max() <= PIXEL_SAME:
+        bottom = 0
     return top, bottom
 
 
@@ -98,30 +119,55 @@ def find_move(prev, cur, top, bottom):
     region = b - a
     if region < 24:
         return None
-    if np.abs(prev[a:b] - cur[a:b]).mean() < ROW_SAME:
+    if np.abs(prev[a:b] - cur[a:b]).max() <= PIXEL_SAME:
         return 0
     band = max(12, min(region // 6, 100))
-    # The most detailed strip near the top of the new picture: the top is
-    # what was already on screen before (lower down), when a scroll moves
-    # less than the area's height. A blank strip would match anywhere.
-    best, start = -1.0, a
-    for y in range(a, a + max(1, region // 8), max(4, band // 4)):
-        spread = cur[y: y + band].std()
-        if spread > best:
-            best, start = spread, y
-    if best < 2.0:
+    # Detailed strips in the top half of the new picture: the top is what was
+    # already on screen before (lower down), when a scroll moves less than the
+    # area's height. A blank strip would match anywhere. Several are tried, so
+    # one that lands on something floating over the page (a chat's date
+    # bubble, a "jump to bottom" button) doesn't spoil the match.
+    candidates = sorted(((cur[y: y + band].std(), y)
+                         for y in range(a, a + max(1, region // 2), max(4, band // 2))), reverse=True)
+    candidates = [y for spread, y in candidates if spread >= 2.0][:STRIPS]
+    # Strips at the very top too: only they can find a scroll of nearly the
+    # whole area (the overlap is then just a little at the top).
+    for y in (a, a + band // 2):
+        if y not in candidates and cur[y: y + band].std() >= 2.0:
+            candidates.append(y)
+    if not candidates:
         return None
-    strip = cur[start: start + band].astype(np.float32)
     area = prev[a:b].astype(np.float32)
-    scores = cv2.matchTemplate(area, strip, cv2.TM_CCOEFF_NORMED)
-    _min, score, _minloc, (_x, found) = cv2.minMaxLoc(scores)
-    if score < MATCH_MIN:
-        return None
-    move = (found + a) - start
-    if move < 0:
-        return None
-    if move == 0:
-        return 0
-    # The whole overlap must agree, not just the strip.
-    overlap = np.abs(prev[a + move: b].astype(np.float32) - cur[a: b - move]).mean()
-    return move if overlap < CHECK_MAX else None
+    still = False
+    best = None                           # (share of rows that agree, -mean difference, move)
+    for y in candidates:
+        strip = cur[y: y + band].astype(np.float32)
+        scores = cv2.matchTemplate(area, strip, cv2.TM_CCOEFF_NORMED)[:, 0]
+        # Every good match, not just the best: on a repeating page (a grid of
+        # identical icons) the strip also matches one row off.
+        peaks = [i for i in np.argsort(scores)[::-1][:40] if scores[i] >= MATCH_MIN]
+        for found in peaks:
+            move = (found + a) - y
+            if move == 0:
+                still = True              # this part didn't move (or floats over the page)
+                continue
+            if move < 0:
+                continue
+            agree, diff = _overlap(prev, cur, a, b, move)
+            if best is None or (agree, -diff) > best[:2]:
+                best = (agree, -diff, move)
+    if best and best[0] >= ROWS_AGREE:
+        return best[2]
+    return 0 if still else None
+
+
+def _overlap(prev, cur, a, b, move):
+    """How well the pictures agree if the page moved up by `move`: the share
+    of overlapping rows that match, and the mean difference. What stayed at
+    the same place on the screen (a floating date bubble) is left out."""
+    moved = np.abs(prev[a + move: b] - cur[a: b - move])
+    floating = np.abs(prev[a: b - move] - cur[a: b - move]) <= PIXEL_SAME
+    rows = np.where(floating, 0, moved).mean(axis=1)
+    if not rows.size:
+        return 0.0, 1e9
+    return float((rows < CHECK_MAX).mean()), float(rows.mean())

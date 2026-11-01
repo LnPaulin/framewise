@@ -104,6 +104,11 @@ const IFACE = `
       <arg type="i" direction="in" name="y"/>
       <arg type="i" direction="in" name="clicks"/>
     </method>
+    <method name="ScrollSmoothAt">
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="i" direction="in" name="clicks"/>
+    </method>
     <method name="ShowScrollPill">
       <arg type="i" direction="in" name="x"/>
       <arg type="i" direction="in" name="y"/>
@@ -616,10 +621,20 @@ export default class FramewiseExtension extends Extension {
     }
 
     ScrollAt(x, y, clicks) {
-        this._scroller?.scrollAt(x, y, Math.max(1, Math.min(30, clicks)));
+        if (this._scroller && !this._scroller.scrollAt(x, y, Math.max(1, Math.min(30, clicks))))
+            this._dbus?.emit_signal('ScrollStopClicked', null);      // the mouse was moved: stop
+    }
+
+    // The same with smooth (touchpad-like) scrolling, for apps that ignore
+    // wheel clicks (Files).
+    ScrollSmoothAt(x, y, clicks) {
+        if (this._scroller && !this._scroller.scrollAt(x, y, Math.max(1, Math.min(30, clicks)), true))
+            this._dbus?.emit_signal('ScrollStopClicked', null);
     }
 
     ShowScrollPill(x, y, width, height) {
+        if (!this._scrollPill)
+            this._scroller?.reset();
         this._scrollPill ??= new ScrollPill(() => this._dbus?.emit_signal('ScrollStopClicked', null));
         this._scrollPill.placeOutside(x, y, width, height);
     }

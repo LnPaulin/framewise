@@ -1,6 +1,7 @@
 // Scrolling screenshots, GNOME Shell side: scrolls the window under a spot
-// (with a virtual mouse wheel) and shows a "Click to stop" pill outside the
-// area being captured. The app captures and joins the pictures.
+// (with a virtual mouse wheel) and shows a "Scrolling" pill outside the
+// area being captured. Moving the mouse, or clicking the pill, stops it.
+// The app captures and joins the pictures.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -9,6 +10,9 @@ import Mtk from 'gi://Mtk';
 import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+
+const MOVED = 12;
+const SMOOTH_STEP = 5;   // smooth-scroll units per "click" (about 30 px in Files)      // pixels the pointer may drift before it counts as moved by the person
 
 export class Scroller {
     // Made when the extension starts: a virtual device drops the first events
@@ -19,8 +23,19 @@ export class Scroller {
         this._pointer = backend.get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
     }
 
+    // A new capture: the pointer may be moved to the area again.
+    reset() {
+        this._placed = null;
+    }
+
     // Moves the pointer to x, y and turns the wheel down `clicks` times.
-    scrollAt(x, y, clicks) {
+    // False (and nothing done) when the person moved the mouse away since the
+    // last scroll: they want it back, so the capture stops instead.
+    scrollAt(x, y, clicks, smooth = false) {
+        const [px, py] = global.get_pointer();
+        if (this._placed && Math.hypot(px - this._placed[0], py - this._placed[1]) > MOVED)
+            return false;
+        this._placed = [x, y];
         this._pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y);
         if (this._timer)
             GLib.source_remove(this._timer);
@@ -28,10 +43,15 @@ export class Scroller {
         this._timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
             this._timer = 0;
             const t = GLib.get_monotonic_time();
-            for (let i = 0; i < clicks; i++)
-                this._pointer?.notify_discrete_scroll(t + i, Clutter.ScrollDirection.DOWN, Clutter.ScrollSource.WHEEL);
+            for (let i = 0; i < clicks; i++) {
+                if (smooth)
+                    this._pointer?.notify_scroll_continuous(t + i, 0, SMOOTH_STEP, Clutter.ScrollSource.WHEEL, Clutter.ScrollFinishFlags.NONE);
+                else
+                    this._pointer?.notify_discrete_scroll(t + i, Clutter.ScrollDirection.DOWN, Clutter.ScrollSource.WHEEL);
+            }
             return GLib.SOURCE_REMOVE;
         });
+        return true;
     }
 
     destroy() {
@@ -53,7 +73,7 @@ class FramewiseScrollPill extends St.Button {
         box.add_child(this._dot);
         box.add_child(new St.Label({text: 'Scrolling…', style_class: 'framewise-dictation-label',
             y_align: Clutter.ActorAlign.CENTER}));
-        box.add_child(new St.Label({text: 'Click to stop', style_class: 'framewise-dictation-hint',
+        box.add_child(new St.Label({text: 'Move the mouse to stop', style_class: 'framewise-dictation-hint',
             y_align: Clutter.ActorAlign.CENTER}));
         this.set_child(box);
         this.connect('clicked', () => onClick());

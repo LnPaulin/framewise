@@ -3,7 +3,7 @@
 After the area is chosen (on the frozen screen, like a screenshot), the
 extension turns the mouse wheel over it, a few clicks at a time; after each
 scroll the area is captured again and joined to the rest (stitch.py). It
-stops at the end of the page, when the pill is clicked, or at the size
+stops at the end of the page, when the mouse is moved or the pill clicked, or at the size
 limit. The first scrolls measure how far one wheel click goes, so each
 scroll then moves about half the area (the pictures must overlap).
 Pages scroll smoothly, so after each scroll the area is captured until it
@@ -38,6 +38,7 @@ class ScrollCapture:
         self.stopped = False
         self.finished = False
         self._checked_end = False
+        self.smooth = False          # smooth scrolling instead of wheel clicks
         self._tmp = Path(tempfile.mkdtemp(prefix="framewise-scroll-"))
         shell.on_scroll_stop = self.stop
         shell.show_scroll_pill(*self.rect)
@@ -60,7 +61,7 @@ class ScrollCapture:
 
     def _scroll(self):
         x, y, w, h = self.rect
-        self.shell.scroll_at(x + w // 2, y + h // 2, self.clicks)
+        self.shell.scroll_at(x + w // 2, y + h // 2, self.clicks, smooth=self.smooth)
         self.steps += 1
         self._before = None
         self._polls = 0
@@ -96,9 +97,16 @@ class ScrollCapture:
             region = frame.shape[0] - self.stitcher.top - self.stitcher.bottom
             want = round(region * TARGET / max(1.0, per_click))
             self.clicks = int(max(1, min(25, self.clicks * 2, want)))
+        if self.stopped and status in ("added", "end"):
+            self._finish("")                 # stopped by the person: keep what there is
+            return
         if status == "end" and self.steps and not self._checked_end:
-            # Nothing moved: the end, unless the page was slow to respond. Once more.
+            # Nothing moved: the end, unless the page was slow to respond. Once more,
+            # and if nothing has moved at all yet, with smooth scrolling: some apps
+            # (Files) ignore wheel clicks.
             self._checked_end = True
+            if not self.stitcher.last_move and not self.smooth:
+                self.smooth, self.clicks = True, FIRST_CLICKS
             self._scroll()
             return
         if status == "added":

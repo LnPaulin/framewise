@@ -82,6 +82,57 @@ class StitchTests(unittest.TestCase):
         self.assertTrue(np.array_equal(out[-footer:], viewport(p, 0, footer=footer)[-footer:]))
         self.assertTrue(np.array_equal(out[header:-footer], p[header: 3000 - footer]))
 
+    def test_chat_with_floating_date_and_button(self):
+        # R.20: a chat shows a date bubble at the top and a "jump to bottom"
+        # button while it scrolls; they float over the messages.
+        p = page(height=3000, seed=4)
+        s, offset, statuses = stitch.Stitcher(), 0, []
+        for i, step in enumerate([200, 260, 240, 300, 250, 280, 0, 0]):
+            frame = viewport(p, offset)
+            if i:                                            # appear once scrolling starts
+                frame[8:36, 200:300] = (90, 120, 160)        # the date bubble
+                frame[8 + 14, 215:285] = 255
+                if i % 2:
+                    frame[540:584, 440:484] = (50, 50, 50)   # the round button, on and off
+            statuses.append(s.add(frame))
+            if statuses[-1] == "end":
+                break
+            offset = min(offset + step, len(p) - 600)
+        self.assertNotIn("lost", statuses)
+        result = s.result()
+        # Apart from where the floating things sat, the picture is the page.
+        self.assertEqual(result.shape[0], offset + 600)
+        self.assertLess(np.abs(result[:, :180].astype(int) - p[: result.shape[0], :180]).mean(), 1.0)
+
+    def test_grid_of_identical_icons(self):
+        # Files: the same icon in every cell, only the names differ; a scroll of
+        # exactly one row must still count as moving.
+        rng = np.random.default_rng(9)
+        p = np.full((2700, 600, 3), 250, np.uint8)
+        for r in range(30):
+            for c in range(6):
+                y, x = r * 90, c * 100
+                p[y + 10: y + 60, x + 30: x + 70] = 210            # the icon
+                p[y + 65: y + 78, x + 20: x + 20 + int(rng.integers(40, 70))] = rng.integers(0, 120, (13, 1, 3))
+        s, statuses = self.capture(p, [90, 180, 90, 270, 90])
+        self.assertNotIn("lost", statuses)
+        self.assertEqual(statuses.count("added"), 6)
+        self.assertEqual((s.top, s.bottom), (0, 0))       # no fixed header: it's all icons
+        self.assertTrue(np.array_equal(s.result(), p[: s.result().shape[0]]))
+
+    def test_grid_starting_mid_row(self):
+        # The same, with the view starting part-way into a row (as in Files).
+        rng = np.random.default_rng(3)
+        p = np.full((2730, 600, 3), 250, np.uint8)
+        for r in range(30):
+            for c in range(6):
+                y, x = 30 + r * 90, c * 100
+                p[y + 10: y + 60, x + 30: x + 70] = 210
+                p[y + 65: y + 78, x + 20: x + 20 + int(rng.integers(40, 70))] = rng.integers(0, 120, (13, 1, 3))
+        s, statuses = self.capture(p[20:], [90, 270, 180], view=495)
+        self.assertNotIn("lost", statuses)
+        self.assertTrue(np.array_equal(s.result(), p[20: 20 + s.result().shape[0]]))
+
     def test_nothing_scrolls(self):
         p = page(600)
         s = stitch.Stitcher()
@@ -123,7 +174,7 @@ class SmoothShell:
     def hide_scroll_pill(self):
         pass
 
-    def scroll_at(self, x, y, clicks):
+    def scroll_at(self, x, y, clicks, smooth=False):
         self.target = min(self.max_offset, self.target + clicks * self.per_click)
 
     def screenshot_area(self, x, y, w, h, path):

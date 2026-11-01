@@ -197,8 +197,8 @@ class ShellHelper:
                                                                          str(path))), timeout=5000)
         return bool(res and res[0])
 
-    def scroll_at(self, x, y, clicks):
-        self._call("ScrollAt", GLib.Variant("(iii)", (int(x), int(y), int(clicks))))
+    def scroll_at(self, x, y, clicks, smooth=False):
+        self._call("ScrollSmoothAt" if smooth else "ScrollAt", GLib.Variant("(iii)", (int(x), int(y), int(clicks))))
 
     def show_scroll_pill(self, x, y, w, h):
         self._call("ShowScrollPill", GLib.Variant("(iiii)", (int(x), int(y), int(w), int(h))))
