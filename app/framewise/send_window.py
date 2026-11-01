@@ -59,6 +59,16 @@ class SendWindow(Adw.ApplicationWindow):
         self.link = Gtk.Label(selectable=True, wrap=True, wrap_mode=2, max_width_chars=44,
                               css_classes=["caption", "dim-label"])
         show.append(self.link)
+        # The laptop can't tell why a phone can't reach it; these are the usual reasons.
+        self.help = Gtk.Expander(label="Page won't open on your phone?", halign=Gtk.Align.CENTER)
+        self.help.set_child(Gtk.Label(
+            wrap=True, xalign=0, max_width_chars=44, css_classes=["caption"], margin_top=6,
+            label="• Turn off any VPN on the phone: it keeps the phone from reaching this computer.\n"
+                  "• Use the same Wi-Fi as this computer, not a guest network. Some routers keep "
+                  "devices apart (\u201cclient isolation\u201d or \u201cAP isolation\u201d in the "
+                  "router\u2019s settings).\n"
+                  "• Type the address under the code into the phone\u2019s browser yourself."))
+        show.append(self.help)
         buttons = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER, margin_top=6)
         other = Gtk.Button(label="Send Something Else")
         other.connect("clicked", lambda *_: self._stop_and_choose())
@@ -181,6 +191,8 @@ class SendWindow(Adw.ApplicationWindow):
         self.what.set_text(f"{item.name} · {share.human_size(item.size)}" if item.path else item.name)
         self.link.set_text(self.sharing.url if texture else f"Open this on your phone: {self.sharing.url}")
         self._set_status("Scan the code with your phone's camera.")
+        self.help.set_visible(True)
+        self.help.set_expanded(False)
         self.stack.set_visible_child_name("show")
         self.app.hold()
         self._ticker = GLib.timeout_add_seconds(30, self._tick)
@@ -202,6 +214,7 @@ class SendWindow(Adw.ApplicationWindow):
             return
         if kind == "opened":
             self._set_status("Opened on your phone.")
+            self.help.set_visible(False)
         elif kind == "downloaded":
             self._set_status("Sent to your phone ✓")
         elif kind == "stopped":
