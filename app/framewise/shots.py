@@ -140,10 +140,22 @@ class ShotSession:
                      hint=hint, pick=self.pick_mode)
 
     def _chosen(self, still, result, bounds):
+        # Whatever goes wrong, the session must end: a session left busy
+        # would make every later screenshot shortcut do nothing.
+        try:
+            self._handle(still, result, bounds)
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            traceback.print_exc()
+            still.unlink(missing_ok=True)
+            self.app.notify("The screenshot didn't work", str(e))
+            self._done()
+
+    def _handle(self, still, result, bounds):
         if result is None:
             self._done()
             return
-        kind, what = result
+        kind, what = result[:2]
         if kind == "color":
             from . import colors
             still.unlink(missing_ok=True)

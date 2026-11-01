@@ -71,3 +71,50 @@ class PickSelectorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PickSessionTests(unittest.TestCase):
+    """The screenshot session after a color is picked (the 2.3 bug: it crashed
+    and stayed busy, so every later shortcut did nothing)."""
+
+    def session(self):
+        from framewise.shots import ShotSession
+
+        class App:
+            released = 0
+            notes = []
+
+            def release(self):
+                self.released += 1
+
+            def notify(self, *a):
+                self.notes.append(a)
+
+        s = object.__new__(ShotSession)
+        s.app, s.busy, s.scroll_mode, s.text_mode = App(), True, False, False
+        return s
+
+    def test_color_is_copied_and_session_ends(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        s = self.session()
+        still = Path(tempfile.mkdtemp()) / "desktop.png"
+        still.write_bytes(b"x")
+        with mock.patch.object(colors, "copy_and_notify") as copy:
+            s._chosen(still, ("color", (233, 84, 32), True), (0, 0, 100, 100))
+        copy.assert_called_once_with(s.app, (233, 84, 32), as_rgb=True)
+        self.assertFalse(s.busy)
+        self.assertFalse(still.exists())
+
+    def test_any_error_still_ends_the_session(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        s = self.session()
+        still = Path(tempfile.mkdtemp()) / "desktop.png"
+        with mock.patch.object(colors, "copy_and_notify", side_effect=RuntimeError("boom")):
+            s._chosen(still, ("color", (0, 0, 0), False), (0, 0, 100, 100))
+        self.assertFalse(s.busy)
+        self.assertEqual(s.app.released, 1)
+        self.assertTrue(s.app.notes)
