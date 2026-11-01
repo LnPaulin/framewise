@@ -34,6 +34,20 @@ const TOOLS = [
     ['rect', 'Rectangle', Clutter.KEY_r],
     ['spotlight', 'Spotlight', Clutter.KEY_s],
 ];
+// Keys 1-5 pick a colour: the number row (by its place, so any keyboard
+// layout works) or the number pad.
+function colorKey(event) {
+    const sym = event.get_key_symbol();
+    if (sym >= Clutter.KEY_1 && sym <= Clutter.KEY_5)
+        return sym - Clutter.KEY_1;
+    if (sym >= Clutter.KEY_KP_1 && sym <= Clutter.KEY_KP_5)
+        return sym - Clutter.KEY_KP_1;
+    const code = event.get_key_code();
+    if (code >= 10 && code <= 14)           // the 1-5 keys of the number row
+        return code - 10;
+    const pad = [87, 88, 89, 83, 84].indexOf(code);    // 1-5 on the number pad, Num Lock on or off
+    return pad >= 0 ? pad : null;
+}
 const WIDTH = {pen: 4, highlighter: 22, arrow: 5, rect: 4};
 const SPOT_RADIUS = 110;
 const SPOT_DIM = 0.6;
@@ -193,8 +207,8 @@ export class Drawing {
             this._toolbarShown = !this._toolbarShown;
             if (this._toolbar)
                 this._toolbar.visible = this._toolbarShown;
-        } else if (sym >= Clutter.KEY_1 && sym <= Clutter.KEY_5) {
-            this._setColor(sym - Clutter.KEY_1);
+        } else if (colorKey(event) !== null) {
+            this._setColor(colorKey(event));
         } else {
             const tool = TOOLS.find(t => t[2] === sym || t[2] === sym + 32);
             if (!tool)

@@ -8,6 +8,7 @@
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
+import Meta from 'gi://Meta';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
@@ -78,6 +79,10 @@ class FramewiseDictationPill extends St.Button {
     }
 });
 
+export function isDesktop(win) {
+    return win.get_window_type() === Meta.WindowType.DESKTOP || (win.get_title() ?? '').startsWith('@!');
+}
+
 export class Typist {
     constructor() {
         // Made now: a virtual keyboard drops the first keys sent right after
@@ -87,10 +92,12 @@ export class Typist {
         this._timer = 0;
     }
 
-    // Pastes text into the focused window. False when no window has the focus.
+    // Pastes text into the focused window. False when no window has the
+    // focus, or only the desktop has it (a click on the wallpaper focuses
+    // Ubuntu's desktop icons, a window whose title starts with "@!").
     type(text) {
         const win = global.display.focus_window;
-        if (!win || !text)
+        if (!win || !text || isDesktop(win))
             return false;
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
         const names = [win.get_wm_class(), win.get_gtk_application_id(), win.get_sandboxed_app_id?.()]
