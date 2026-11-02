@@ -24,7 +24,9 @@ def rect_on_monitor(rect, geometry):
     if w <= 0 or h <= 0 or gw <= 0 or gh <= 0:
         return None
     x0, y0 = max(gx, x - PAD - LEFT_ROOM), max(gy, y - PAD)
-    x1, y1 = min(gx + gw, x + w + PAD), min(gy + gh, y + h + PAD)
+    # Not below them: they fill the top bar's height, and under it is a window
+    # that may have moved since the clean picture was taken.
+    x1, y1 = min(gx + gw, x + w + PAD), min(gy + gh, y + h)
     if x1 <= x0 or y1 <= y0:
         return None
     return [round((x0 - gx) / gw, 5), round((y0 - gy) / gh, 5),
@@ -50,8 +52,9 @@ def pixels(take_info, size, crop_fraction=None):
             return None
     vw, vh = size
     x, y = int(fx * vw) & ~1, int(fy * vh) & ~1
-    x1, y1 = min(vw, int(round((fx + fw) * vw)) + 1), min(vh, int(round((fy + fh) * vh)) + 1)
-    w, h = (x1 - x + 1) & ~1, (y1 - y + 1) & ~1
+    # Rounded outwards sideways, but never below the top bar.
+    x1, y1 = min(vw, int(round((fx + fw) * vw)) + 1), min(vh, int(round((fy + fh) * vh)))
+    w, h = (x1 - x + 1) & ~1, (y1 - y) & ~1
     w, h = min(w, (vw - x) & ~1), min(h, (vh - y) & ~1)
     return (x, y, w, h) if w >= 2 and h >= 2 else None
 

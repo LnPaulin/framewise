@@ -15,6 +15,15 @@ class GeometryTests(unittest.TestCase):
         self.assertEqual(fr[1], 0)                      # clipped at the top
         self.assertAlmostEqual(fr[2], (100 + 2 * cp.PAD + cp.LEFT_ROOM) / 2000)
 
+    def test_never_below_the_top_bar(self):
+        # 32 px controls fill the top bar: the window under it is never covered.
+        fr = cp.rect_on_monitor((900, 0, 100, 32), (0, 0, 2000, 1000))
+        self.assertAlmostEqual(fr[1] + fr[3], 32 / 1000)
+        _x, y, _w, h = cp.pixels({"controls": {"rect": fr}}, (2000, 1000))
+        self.assertLessEqual(y + h, 32)
+        _x, y, _w, h = cp.pixels({"controls": {"rect": fr}}, (4000, 2000))
+        self.assertLessEqual(y + h, 64)
+
     def test_other_monitor_is_none(self):
         self.assertIsNone(cp.rect_on_monitor((900, 0, 100, 32), (2000, 0, 1920, 1080)))
         self.assertIsNone(cp.rect_on_monitor((0, 0, 0, 0), (0, 0, 1920, 1080)))
@@ -30,7 +39,9 @@ class GeometryTests(unittest.TestCase):
             self.assertEqual(v % 2, 0)
         self.assertLessEqual(x, 0.4501 * 3440)
         self.assertGreaterEqual(x + w, (0.4501 + 0.0523) * 3440)
-        self.assertGreaterEqual(y + h, 0.0377 * 1440)
+        # The bottom never goes past the top bar (rounded down to even).
+        self.assertLessEqual(y + h, 0.0377 * 1440)
+        self.assertGreaterEqual(y + h, 0.0377 * 1440 - 2)
 
     def test_outside_area_is_none(self):
         info = {"controls": {"rect": [0.45, 0.0, 0.05, 0.03]}}
@@ -55,7 +66,7 @@ class GeometryTests(unittest.TestCase):
         x, y, w, h = cp.in_area(info, (1000, 1000), (0.25, 0.0, 0.5, 0.5))
         self.assertAlmostEqual(x, 0.5)
         self.assertAlmostEqual(w, 0.204)      # 102 pixels (rounded out, even)
-        self.assertAlmostEqual(h, 0.104)
+        self.assertAlmostEqual(h, 0.1)        # 50 pixels: not past the top bar
 
     def test_no_controls(self):
         self.assertIsNone(cp.pixels({}, (100, 100)))
