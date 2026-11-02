@@ -163,30 +163,72 @@ SMOOTH_S = 0.15     # seconds over which a zoom's sideways step is eased
 
 
 def steer(views, spots, source, fps):
-    """Moves each zoomed view (x, y, w, h, fractions of the shown part) off
-    the bubble's spot: left, up, right or down, whichever is the shortest
-    step that stays inside the picture. If no step clears it (a click on the
-    bubble itself), the one that leaves the least of it in view. The steps
-    are eased over time so the view glides instead of jumping."""
+    """Keeps the zoomed picture from showing the bubble a second time.
+
+    views: per-frame (x, y, w, h), fractions of the shown part. Returns
+    (views, fades). Each zoomed view moves off the bubble's spot: left, up,
+    right or down, whichever is the shortest step that stays inside the
+    picture, eased over time so the view glides. Early in a zoom (and late,
+    as it goes back) the view is nearly the whole picture and can't avoid the
+    bubble: those frames show instead the first zoom that does avoid it,
+    with the unzoomed picture faded over it (fades[i], 0..1). Both pictures
+    have the camera in the same place, so it never shows twice."""
     if not views or not spots:
-        return views
+        return views, [0.0] * len(views or ())
     sx, sy, sw, sh = source
     boxes = [(a, b, ((ox - sx) / sw, (oy - sy) / sh, ow / sw, oh / sh))
              for a, b, _r, _rad, (ox, oy, ow, oh) in spots]
+    views = list(views)
+    fades = [0.0] * len(views)
     dx, dy = [0.0] * len(views), [0.0] * len(views)
     for i, (x, y, w, h) in enumerate(views):
         if w >= 0.999 and h >= 0.999:
             continue                       # not zoomed: the camera layer covers its own spot
         t = i / fps
-        for a, b, box in boxes:
-            if a <= t <= b:
-                dx[i], dy[i] = _step((x, y, w, h), box)
-                break
-    dx, dy = _ease(dx, fps), _ease(dy, fps)
+        box = next((bx for a, b, bx in boxes if a <= t <= b), None)
+        if box is None:
+            continue
+        ex, ey = _step((x, y, w, h), box)
+        if _overlap((x + ex, y + ey, w, h), box) > 0:
+            clear = _first_clear((x, y, w, h), box)
+            if clear is not None:
+                zoom, zc = 1 / w, 1 / clear[2]
+                fades[i] = max(0.0, min(1.0, 1 - (zoom - 1) / (zc - 1)))
+                views[i] = clear
+                x, y, w, h = clear
+                ex, ey = _step(clear, box)
+        dx[i], dy[i] = ex, ey
+    eased_x, eased_y = _ease(dx, fps), _ease(dy, fps)
     out = []
-    for (x, y, w, h), ex, ey in zip(views, dx, dy):
-        out.append((min(max(0.0, x + ex), 1 - w), min(max(0.0, y + ey), 1 - h), w, h))
-    return out
+    for i, (x, y, w, h) in enumerate(views):
+        v = (min(max(0.0, x + eased_x[i]), 1 - w), min(max(0.0, y + eased_y[i]), 1 - h), w, h)
+        box = boxes_at(boxes, i / fps)
+        if box is not None and w < 0.999 and _overlap(v, box) > 0:
+            # Easing between two ways out (left, then up) can land back on the
+            # bubble for a moment: there, the exact step instead.
+            v = (min(max(0.0, x + dx[i]), 1 - w), min(max(0.0, y + dy[i]), 1 - h), w, h)
+        out.append(v)
+    return out, fades
+
+
+def boxes_at(boxes, t):
+    return next((bx for a, b, bx in boxes if a <= t <= b), None)
+
+
+def _first_clear(v, box, most=3.0):
+    """The least zoomed view, around the same centre, that can step clear of
+    the bubble; None if none can (the zoom looks at the bubble itself)."""
+    x, y, w, h = v
+    cx, cy = x + w / 2, y + h / 2
+    zoom = 1 / w
+    while zoom < most:
+        zoom = min(most, zoom * 1.02)
+        nw, nh = 1 / zoom, (h / w) / zoom
+        cand = (min(max(0.0, cx - nw / 2), 1 - nw), min(max(0.0, cy - nh / 2), 1 - nh), nw, nh)
+        ex, ey = _step(cand, box)
+        if _overlap((cand[0] + ex, cand[1] + ey, nw, nh), box) <= 0:
+            return cand
+    return None
 
 
 def _overlap(v, box):

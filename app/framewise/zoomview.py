@@ -46,6 +46,7 @@ class ZoomView(Gtk.Widget):
         self.paintable = None
         self.set_paintable(paintable)
         self.views = None        # per-frame zoom (x, y, w, h) inside the shown part
+        self.fades = None        # per-frame share of the unzoomed picture faded over it (camera_keep.steer)
         self.fps = 60
         self.time_source = None  # () -> current recording time
         self.on_click = None
@@ -226,6 +227,11 @@ class ZoomView(Gtk.Widget):
     def _time(self):
         return self.time_source() if self.time_source else 0.0
 
+    def _fade(self, t):
+        if not self.fades:
+            return 0.0
+        return self.fades[max(0, min(len(self.fades) - 1, int(round(t * self.fps))))]
+
     def _view(self, t):
         if not self.views:
             return 0.0, 0.0, 1.0, 1.0
@@ -326,6 +332,16 @@ class ZoomView(Gtk.Widget):
         self._draw_camera(snap, t, box, view, (sx, sy, sw, sh))
         if self.pointer:
             self._draw_pointer(snap, t, box, view)
+        fade = self._fade(t)
+        if fade > 0.001:
+            # The unzoomed picture over it, as the saved video blends them.
+            whole = (sx, sy, sw, sh)
+            snap.push_opacity(fade)
+            self._draw_video(snap, box, whole)
+            self._draw_patch(snap, box, whole)
+            if self.pointer:
+                self._draw_pointer(snap, t, box, whole)
+            snap.pop()
         snap.pop()
 
         # Captions and pictures, eased in and out.

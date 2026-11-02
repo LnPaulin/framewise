@@ -94,24 +94,66 @@ class SteerTests(unittest.TestCase):
 
     def test_zoom_moves_off_the_camera(self):
         views = [(0.5, 0.5, 0.5, 0.5)] * 30
-        out = ck.steer(views, self.SPOT, self.WHOLE, 30)
+        out, _f = ck.steer(views, self.SPOT, self.WHOLE, 30)
         for v in out:
             self.assertEqual(ck._overlap(v, self.SPOT[0][4]), 0)
             self.assertAlmostEqual(v[2], 0.5)
 
     def test_clear_zoom_untouched(self):
         views = [(0.1, 0.1, 0.5, 0.5)] * 10
-        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30), views)
+        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30)[0], views)
 
     def test_not_zoomed_untouched(self):
         views = [self.WHOLE] * 10
-        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30), views)
+        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30)[0], views)
+
+    def test_zoom_start_never_shows_a_second_camera(self):
+        # A zoom easing in from 1x to 2x around a point near the bubble.
+        from framewise import motion
+        views = []
+        for i in range(31):
+            z = 1 + motion.smootherstep(i / 30)
+            w = 1 / z
+            views.append((min(max(0.0, 0.7 - w / 2), 1 - w), min(max(0.0, 0.6 - w / 2), 1 - w), w, w))
+        out, fades = ck.steer(views, self.SPOT, self.WHOLE, 30)
+        box = self.SPOT[0][4]
+        for v, f in zip(out, fades):
+            # Either the zoomed picture is clear of the bubble, or it isn't zoomed at all.
+            self.assertTrue(ck._overlap(v, box) == 0 or v[2] >= 0.999, (v, f))
+        # The fade goes smoothly from the unzoomed picture to none.
+        first = next(i for i, v in enumerate(views) if v[2] < 0.999)
+        self.assertGreater(fades[first], 0.9)
+        self.assertEqual(fades[-1], 0.0)
+        for a, b in zip(fades[first:], fades[first + 1:]):
+            self.assertLessEqual(b, a + 1e-9)
+
+    def test_random_zooms_never_show_it_when_avoidable(self):
+        # Zooms that ease in and out while wandering around the bubble: easing
+        # between two ways out (left, then up) must not land back on it.
+        import random
+        from framewise import motion
+        rnd = random.Random(1)
+        box = self.SPOT[0][4]
+        for _trial in range(60):
+            c0 = (rnd.uniform(0.3, 0.95), rnd.uniform(0.3, 0.95))
+            c1 = (rnd.uniform(0.3, 0.95), rnd.uniform(0.3, 0.95))
+            amount = rnd.uniform(1.2, 3.0)
+            views = []
+            for i in range(90):
+                p = motion.smootherstep(min(1, i / 12)) if i < 45 else motion.smootherstep(max(0, (89 - i) / 20))
+                w = 1 / (1 + (amount - 1) * p)
+                cx, cy = c0[0] + (c1[0] - c0[0]) * i / 90, c0[1] + (c1[1] - c0[1]) * i / 90
+                views.append((min(max(0, cx - w / 2), 1 - w), min(max(0, cy - w / 2), 1 - w), w, w))
+            out, _f = ck.steer(views, self.SPOT, self.WHOLE, 30)
+            for v, orig in zip(out, views):
+                if v[2] < 0.999 and ck._first_clear(orig, box) is not None:
+                    self.assertEqual(ck._overlap(v, box), 0)
 
     def test_follows_a_moved_bubble(self):
         moved = [(0.0, 1.0, (0.8, 0.7, 0.15, 0.25), (0,) * 4, (0.78, 0.68, 0.19, 0.31)),
                  (1.0, 2.0, (0.05, 0.05, 0.15, 0.25), (0,) * 4, (0.03, 0.03, 0.19, 0.31))]
         views = [(0.5, 0.5, 0.5, 0.5)] * 30 + [(0.0, 0.0, 0.5, 0.5)] * 30
-        out = ck.steer(views, moved, self.WHOLE, 30)
+        out, _f = ck.steer(views, moved, self.WHOLE, 30)
         self.assertEqual(ck._overlap(out[10], moved[0][4]), 0)
         self.assertEqual(ck._overlap(out[50], moved[1][4]), 0)
 

@@ -202,6 +202,7 @@ def write_commands(plan, fps):
     bx, by, bw, bh = plan["base"]
     ax, ay, aw, ah = plan["area"]
     views = plan.get("zoom_views")
+    fades = plan.get("zoom_fades")
     p = plan.get("pointer")
     n = len(views) if views else 0
     last = {}
@@ -215,6 +216,8 @@ def write_commands(plan, fps):
                 h = max(16, int(round(vh * bh)) & ~1)
                 cmds["crop@zoom"] = (w, h, min(bx + bw - w, bx + int(round(vx * bw))) & ~1,
                                      min(by + bh - h, by + int(round(vy * bh))) & ~1)
+            if fades and i < len(fades):
+                cmds["blend@fade"] = round(fades[i], 3)
             parts = []
             for target, value in cmds.items():
                 if last.get(target) == value:
@@ -224,6 +227,8 @@ def write_commands(plan, fps):
                     w, h, x, y = value
                     parts += [f"crop@zoom w {w}", f"crop@zoom h {h}", f"crop@zoom x {x}",
                               f"crop@zoom y {y}"]
+                elif target == "blend@fade":
+                    parts.append(f"blend@fade all_opacity {value:.3f}")
                 else:
                     parts += [f"{target} x {value[0]}", f"{target} y {value[1]}"]
             if parts:
@@ -268,7 +273,7 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, ta
     base = (area[0] + (int(round(sx * area[2])) & ~1), area[1] + (int(round(sy * area[3])) & ~1),
             compose.even(sw * area[2]), compose.even(sh * area[3]))
     Path(work_dir).mkdir(parents=True, exist_ok=True)
-    plan = {"layout": lay, "area": area, "base": base, "zoom_views": None}
+    plan = {"layout": lay, "area": area, "base": base, "zoom_views": None, "zoom_fades": None}
     if em_has_zoom(doc):
         pointer = load_pointer(take_dir)
         samples = [(t, (x - sx) / sw, (y - sy) / sh, *rest)
@@ -281,8 +286,9 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, ta
         # of it (camera_keep.py).
         if doc["zoom"].get("keep_camera", True):
             from . import camera_keep
-            views = camera_keep.steer(views, camera_keep.in_area(take_info, crop_fraction),
-                                      lay["source"], fps)
+            views, fades = camera_keep.steer(views, camera_keep.in_area(take_info, crop_fraction),
+                                             lay["source"], fps)
+            plan["zoom_fades"] = fades if any(f > 0 for f in fades) else None
             plan["camera"] = camera_keep.export_spots(take_info, crop_fraction, base, lay["rect"],
                                                       area, work_dir)
         plan["zoom_views"] = views
@@ -534,8 +540,19 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
     # The zoom's crop size changes over time, which only commands can do;
     # sendcmd sits right before it so they arrive as close to their frame as possible.
     send = f"sendcmd=f='{plan['commands']}'," if plan.get("has_commands") else ""
+    fading = bool(plan.get("zoom_fades"))
+    if fading:
+        # Near the camera, a zoom starts (and ends) by fading from the unzoomed
+        # picture into the first zoom clear of it (camera_keep.steer).
+        parts.append(f"[{cur}]{send}split[zm][zu]")
+        cur, send = "zm", ""
     parts.append(f"[{cur}]{send}crop@zoom={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=lanczos,setsar=1[vs]")
     cur = "vs"
+    if fading:
+        parts.append(f"[zu]crop={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=bilinear,setsar=1,format=yuv420p[zuf];"
+                     f"[vs]format=yuv420p[vsf];"
+                     f"[zuf][vsf]blend@fade=all_mode=normal:all_opacity=0[vb]")
+        cur = "vb"
     for k, c in enumerate(cams):
         ox, oy = c["at"]
         parts.append(f"[{cur}][ca{k}]overlay={ox}:{oy}:"

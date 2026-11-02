@@ -690,8 +690,12 @@ class StyleMixin:
                                      z["amount"], samples, self.duration, self.fps, typing=typing)
             if z.get("keep_camera", True):
                 from . import camera_keep
-                views = camera_keep.steer(views, self.camera_spots, lay["source"], self.fps)
+                views, fades = camera_keep.steer(views, self.camera_spots, lay["source"], self.fps)
+                self.picture.fades = fades
+            else:
+                self.picture.fades = None
             self.picture.set_views(views, self.fps)
         else:
+            self.picture.fades = None
             self.picture.set_views(None, self.fps)
         return False
