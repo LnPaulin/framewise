@@ -11,8 +11,8 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const MOVED = 12;
-const SMOOTH_STEP = 5;   // smooth-scroll units per "click" (about 30 px in Files)      // pixels the pointer may drift before it counts as moved by the person
+const MOVED = 80;          // pixels the pointer may drift (a bumped desk) before it counts as moved by the person
+const SMOOTH_STEP = 5;   // smooth-scroll units per "click" (about 30 px in Files)
 
 export class Scroller {
     // Made when the extension starts: a virtual device drops the first events

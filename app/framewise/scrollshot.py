@@ -10,6 +10,7 @@ Pages scroll smoothly, so after each scroll the area is captured until it
 stops changing; only that still picture is used.
 """
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -90,6 +91,11 @@ class ScrollCapture:
             self._finish("The screen couldn't be captured.")
             return
         status = self.stitcher.add(frame)
+        debug = os.environ.get("FRAMEWISE_SCROLL_DEBUG")
+        if debug:                            # for finding why a page can't be followed
+            import cv2
+            Path(debug).mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(f"{debug}/{self.steps:03d}-{status}-c{self.clicks}{'s' if self.smooth else ''}.png", frame)
         if status == "added" and self.stitcher.last_move and self.steps:
             # How far one click moved, so the next scroll goes about half the area
             # (growing at most twice as far each time, in case it was misjudged).
