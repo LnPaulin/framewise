@@ -688,6 +688,9 @@ class StyleMixin:
             typing = [(t, (x - sx) / sw, (y - sy) / sh) for t, x, y in self.typing]
             views = motion.viewports(export.segments_in_base(z["segments"], lay["source"]),
                                      z["amount"], samples, self.duration, self.fps, typing=typing)
+            if z.get("keep_camera", True):
+                from . import camera_keep
+                views = camera_keep.steer(views, self.camera_spots, lay["source"], self.fps)
             self.picture.set_views(views, self.fps)
         else:
             self.picture.set_views(None, self.fps)

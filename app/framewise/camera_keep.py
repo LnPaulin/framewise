@@ -1,13 +1,14 @@
 """Keeps the camera bubble where it was when the video zooms.
 
 The bubble is a window on the screen, so it is recorded with everything
-else, and a zoom (on clicks, on typing, or a set spot) would enlarge it or
-push it out of the picture. While recording, where the bubble's picture is
-on screen is noted (take.json "camera"); the editor preview and the saved
-video then draw that part of the recording again over the zoomed picture,
-unzoomed, in the same place, so the camera stays put whatever the zoom does.
-Under it, the bubble (with its shadow) is first filled in from the colours
-around it, so the zoomed picture doesn't show a second, enlarged camera.
+else (GNOME can't leave one window out of a screen recording). While
+recording, where the bubble's picture is on screen is noted (take.json
+"camera"). The editor preview and the saved video then:
+
+- draw that part of the recording on top of the zoomed picture, unzoomed and
+  in its shape, so the camera stays in its corner whatever the zoom does;
+- steer each zoom clear of the bubble's spot, so the zoomed picture never
+  shows the camera a second time, enlarged.
 """
 
 import math
@@ -87,7 +88,7 @@ def _recording_time(runs, mono, forward):
 def in_area(take_info, crop_fraction=None):
     """The spots as fractions of the recorded area (what the editor shows):
     [(start, end, (x, y, w, h), radii as fractions of the width, outer)],
-    outer being the picture with its shadow (x, y, w, h): the part filled in."""
+    outer being the picture with its shadow (x, y, w, h): what zooms keep clear of."""
     cx, cy, cw, ch = crop_fraction or (0.0, 0.0, 1.0, 1.0)
     out = []
     for s in (take_info or {}).get("camera") or ():
@@ -101,11 +102,6 @@ def in_area(take_info, crop_fraction=None):
         outer = (ox, oy, min(1.0, x + w + sr / cw) - ox, min(1.0, y + h + sb / ch) - oy)
         out.append((s["start"], s["end"], (x, y, w, h), tuple(s.get("radii") or (0, 0, 0, 0)), outer))
     return out
-
-
-def fill_sigma(w, h):
-    """How strongly the filled-in spot is blurred (pixels of the take)."""
-    return max(2.0, min(w, h) / 5)
 
 
 def mask(w, h, radii_px):
@@ -158,12 +154,79 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
                                       cv2.BORDER_REPLICATE)
         path = Path(work_dir) / f"camera_mask_{k}.png"
         cv2.imwrite(str(path), part)
-        # The part filled in under it (ffmpeg's delogo needs a pixel of border).
-        fx0, fy0 = max(1, int(ax + outer[0] * aw)), max(1, int(ay + outer[1] * ah))
-        fx1 = min(ax + aw - 1, int(math.ceil(ax + (outer[0] + outer[2]) * aw)))
-        fy1 = min(ay + ah - 1, int(math.ceil(ay + (outer[1] + outer[3]) * ah)))
-        fill = (fx0, fy0, fx1 - fx0, fy1 - fy0) if fx1 - fx0 >= 4 and fy1 - fy0 >= 4 else None
         spots.append({"start": start, "end": end, "crop": (cx0, cy0, cw, ch),
-                      "at": (ox, oy), "size": (ow, oh), "mask": str(path), "fill": fill,
-                      "sigma": fill_sigma(fill[2], fill[3]) if fill else 0})
+                      "at": (ox, oy), "size": (ow, oh), "mask": str(path)})
     return spots
+
+
+SMOOTH_S = 0.15     # seconds over which a zoom's sideways step is eased
+
+
+def steer(views, spots, source, fps):
+    """Moves each zoomed view (x, y, w, h, fractions of the shown part) off
+    the bubble's spot: left, up, right or down, whichever is the shortest
+    step that stays inside the picture. If no step clears it (a click on the
+    bubble itself), the one that leaves the least of it in view. The steps
+    are eased over time so the view glides instead of jumping."""
+    if not views or not spots:
+        return views
+    sx, sy, sw, sh = source
+    boxes = [(a, b, ((ox - sx) / sw, (oy - sy) / sh, ow / sw, oh / sh))
+             for a, b, _r, _rad, (ox, oy, ow, oh) in spots]
+    dx, dy = [0.0] * len(views), [0.0] * len(views)
+    for i, (x, y, w, h) in enumerate(views):
+        if w >= 0.999 and h >= 0.999:
+            continue                       # not zoomed: the camera layer covers its own spot
+        t = i / fps
+        for a, b, box in boxes:
+            if a <= t <= b:
+                dx[i], dy[i] = _step((x, y, w, h), box)
+                break
+    dx, dy = _ease(dx, fps), _ease(dy, fps)
+    out = []
+    for (x, y, w, h), ex, ey in zip(views, dx, dy):
+        out.append((min(max(0.0, x + ex), 1 - w), min(max(0.0, y + ey), 1 - h), w, h))
+    return out
+
+
+def _overlap(v, box):
+    x, y, w, h = v
+    bx, by, bw, bh = box
+    return max(0.0, min(x + w, bx + bw) - max(x, bx)) * max(0.0, min(y + h, by + bh) - max(y, by))
+
+
+def _step(v, box):
+    x, y, w, h = v
+    bx, by, bw, bh = box
+    if _overlap(v, box) <= 0:
+        return 0.0, 0.0
+    best = None
+    for ex, ey in ((bx - (x + w), 0.0), (0.0, by - (y + h)), (bx + bw - x, 0.0), (0.0, by + bh - y)):
+        # As far as the picture allows in that direction.
+        ex = min(max(ex, -x), 1 - w - x)
+        ey = min(max(ey, -y), 1 - h - y)
+        left = _overlap((x + ex, y + ey, w, h), box)
+        key = (round(left, 6), abs(ex) + abs(ey))
+        if best is None or key < best[0]:
+            best = (key, ex, ey)
+    return best[1], best[2]
+
+
+def _ease(values, fps):
+    """Smooths steps both ways in time (no lag), keeping the larger step where
+    one is needed: the view is never eased back onto the bubble."""
+    k = 1 - math.exp(-1 / max(1.0, SMOOTH_S * fps))
+    fwd, cur = [], 0.0
+    for v in values:
+        cur += (v - cur) * k
+        fwd.append(cur)
+    back, cur = [0.0] * len(values), 0.0
+    for i in range(len(values) - 1, -1, -1):
+        cur += (values[i] - cur) * k
+        back[i] = cur
+    out = []
+    for v, f, b in zip(values, fwd, back):
+        e = (f + b) / 2
+        # Keep at least the step needed, in its direction.
+        out.append(min(e, v) if v < 0 else max(e, v) if v > 0 else e)
+    return out

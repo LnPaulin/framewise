@@ -87,6 +87,35 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(ck.mask(10, 10, [0] * 4).min(), 255)
 
 
+class SteerTests(unittest.TestCase):
+    # A bubble at the bottom right (with its shadow), for the whole recording.
+    SPOT = [(0.0, 10.0, (0.8, 0.7, 0.15, 0.25), (0.5,) * 4, (0.78, 0.68, 0.19, 0.31))]
+    WHOLE = (0.0, 0.0, 1.0, 1.0)
+
+    def test_zoom_moves_off_the_camera(self):
+        views = [(0.5, 0.5, 0.5, 0.5)] * 30
+        out = ck.steer(views, self.SPOT, self.WHOLE, 30)
+        for v in out:
+            self.assertEqual(ck._overlap(v, self.SPOT[0][4]), 0)
+            self.assertAlmostEqual(v[2], 0.5)
+
+    def test_clear_zoom_untouched(self):
+        views = [(0.1, 0.1, 0.5, 0.5)] * 10
+        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30), views)
+
+    def test_not_zoomed_untouched(self):
+        views = [self.WHOLE] * 10
+        self.assertEqual(ck.steer(views, self.SPOT, self.WHOLE, 30), views)
+
+    def test_follows_a_moved_bubble(self):
+        moved = [(0.0, 1.0, (0.8, 0.7, 0.15, 0.25), (0,) * 4, (0.78, 0.68, 0.19, 0.31)),
+                 (1.0, 2.0, (0.05, 0.05, 0.15, 0.25), (0,) * 4, (0.03, 0.03, 0.19, 0.31))]
+        views = [(0.5, 0.5, 0.5, 0.5)] * 30 + [(0.0, 0.0, 0.5, 0.5)] * 30
+        out = ck.steer(views, moved, self.WHOLE, 30)
+        self.assertEqual(ck._overlap(out[10], moved[0][4]), 0)
+        self.assertEqual(ck._overlap(out[50], moved[1][4]), 0)
+
+
 def _grey_at(path, t, x, y, w, h):
     raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t}", "-i", str(path), "-frames:v", "1",
                           "-vf", f"crop={w}:{h}:{x}:{y},format=gray", "-f", "rawvideo", "-"],

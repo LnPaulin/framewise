@@ -277,12 +277,15 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, ta
                   for t, x, y in area_typing(pointer, crop_fraction)]
         views = motion.viewports(segments_in_base(doc["zoom"]["segments"], lay["source"]),
                                  doc["zoom"]["amount"], samples, duration, fps, typing=typing)
-        plan["zoom_views"] = views
-        # The camera bubble stays where it was, unzoomed (camera_keep.py).
+        # The camera bubble stays where it was, unzoomed, and zooms keep clear
+        # of it (camera_keep.py).
         if doc["zoom"].get("keep_camera", True):
             from . import camera_keep
+            views = camera_keep.steer(views, camera_keep.in_area(take_info, crop_fraction),
+                                      lay["source"], fps)
             plan["camera"] = camera_keep.export_spots(take_info, crop_fraction, base, lay["rect"],
                                                       area, work_dir)
+        plan["zoom_views"] = views
     plan["assets"] = render_assets(doc, lay, work_dir, take_dir)
     plan["pointer"] = None
     ptr_doc = doc.get("pointer") or {}
@@ -513,17 +516,6 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
             parts.append(f"[cs{k}]crop={w}:{h}:{x}:{y},scale={ow}:{oh}:flags=lanczos,format=yuva420p[cv{k}];"
                          f"[{idx}:v]format=gray[ck{k}];[cv{k}][ck{k}]alphamerge[ca{k}]")
             idx += 1
-        # Under it, the bubble is filled in from around it, so the zoomed picture
-        # doesn't show it a second time, enlarged.
-        for k, c in enumerate(cams):
-            if c.get("fill"):
-                x, y, w, h = c["fill"]
-                on = f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'"
-                # Then blurred, so lines at its edges don't streak across it.
-                parts.append(f"[{cur}]delogo=x={x}:y={y}:w={w}:h={h}:{on},split[cfa{k}][cfb{k}];"
-                             f"[cfb{k}]crop={w}:{h}:{x}:{y},gblur=sigma={c['sigma']:.1f}[cfl{k}];"
-                             f"[cfa{k}][cfl{k}]overlay={x}:{y}:{on}[cf{k}]")
-                cur = f"cf{k}"
     p = plan.get("pointer")
     if p:
         # The pointer (and ring) go on the recording itself, before the zoom,
