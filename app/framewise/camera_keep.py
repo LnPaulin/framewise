@@ -159,7 +159,8 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
     return spots
 
 
-SMOOTH_S = 0.15     # seconds over which a zoom's sideways step is eased
+SMOOTH_S = 0.3      # seconds over which a zoom's sideways step is eased in and out
+EPS = 1e-6          # an overlap smaller than this is rounding, not the bubble
 
 
 def steer(views, spots, source, fps):
@@ -180,6 +181,7 @@ def steer(views, spots, source, fps):
              for a, b, _r, _rad, (ox, oy, ow, oh) in spots]
     views = list(views)
     fades = [0.0] * len(views)
+    faded = {}                             # frame -> (bubble box, least zoom clear of it)
     dx, dy = [0.0] * len(views), [0.0] * len(views)
     for i, (x, y, w, h) in enumerate(views):
         if w >= 0.999 and h >= 0.999:
@@ -189,21 +191,39 @@ def steer(views, spots, source, fps):
         if box is None:
             continue
         ex, ey = _step((x, y, w, h), box)
-        if _overlap((x + ex, y + ey, w, h), box) > 0:
+        if _overlap((x + ex, y + ey, w, h), box) > EPS:
             clear = _first_clear((x, y, w, h), box)
             if clear is not None:
-                zoom, zc = 1 / w, 1 / clear[2]
-                fades[i] = max(0.0, min(1.0, 1 - (zoom - 1) / (zc - 1)))
-                views[i] = clear
-                x, y, w, h = clear
-                ex, ey = _step(clear, box)
+                faded[i] = (box, 1 / clear[2])
+                continue
         dx[i], dy[i] = ex, ey
+    # Each run of faded frames uses one zoom (the most any of them needs), so
+    # the picture under the fade doesn't wobble between nearby zooms.
+    i = 0
+    while i < len(views):
+        if i not in faded:
+            i += 1
+            continue
+        j = i
+        while j + 1 < len(views) and j + 1 in faded:
+            j += 1
+        zc = max(faded[k][1] for k in range(i, j + 1))
+        for k in range(i, j + 1):
+            box = faded[k][0]
+            x, y, w, h = views[k]
+            nw, nh = 1 / zc, (h / w) / zc
+            cx, cy = x + w / 2, y + h / 2
+            clear = (min(max(0.0, cx - nw / 2), 1 - nw), min(max(0.0, cy - nh / 2), 1 - nh), nw, nh)
+            fades[k] = max(0.0, min(1.0, 1 - (1 / w - 1) / (zc - 1)))
+            views[k] = clear
+            dx[k], dy[k] = _step(clear, box)
+        i = j + 1
     eased_x, eased_y = _ease(dx, fps), _ease(dy, fps)
     out = []
     for i, (x, y, w, h) in enumerate(views):
         v = (min(max(0.0, x + eased_x[i]), 1 - w), min(max(0.0, y + eased_y[i]), 1 - h), w, h)
         box = boxes_at(boxes, i / fps)
-        if box is not None and w < 0.999 and _overlap(v, box) > 0:
+        if box is not None and w < 0.999 and _overlap(v, box) > EPS:
             # Easing between two ways out (left, then up) can land back on the
             # bubble for a moment: there, the exact step instead.
             v = (min(max(0.0, x + dx[i]), 1 - w), min(max(0.0, y + dy[i]), 1 - h), w, h)
@@ -226,7 +246,7 @@ def _first_clear(v, box, most=3.0):
         nw, nh = 1 / zoom, (h / w) / zoom
         cand = (min(max(0.0, cx - nw / 2), 1 - nw), min(max(0.0, cy - nh / 2), 1 - nh), nw, nh)
         ex, ey = _step(cand, box)
-        if _overlap((cand[0] + ex, cand[1] + ey, nw, nh), box) <= 0:
+        if _overlap((cand[0] + ex, cand[1] + ey, nw, nh), box) <= EPS:
             return cand
     return None
 
@@ -240,7 +260,7 @@ def _overlap(v, box):
 def _step(v, box):
     x, y, w, h = v
     bx, by, bw, bh = box
-    if _overlap(v, box) <= 0:
+    if _overlap(v, box) <= EPS:
         return 0.0, 0.0
     best = None
     for ex, ey in ((bx - (x + w), 0.0), (0.0, by - (y + h)), (bx + bw - x, 0.0), (0.0, by + bh - y)):
@@ -255,20 +275,23 @@ def _step(v, box):
 
 
 def _ease(values, fps):
-    """Smooths steps both ways in time (no lag), keeping the larger step where
-    one is needed: the view is never eased back onto the bubble."""
-    k = 1 - math.exp(-1 / max(1.0, SMOOTH_S * fps))
-    fwd, cur = [], 0.0
-    for v in values:
-        cur += (v - cur) * k
-        fwd.append(cur)
-    back, cur = [0.0] * len(values), 0.0
-    for i in range(len(values) - 1, -1, -1):
-        cur += (values[i] - cur) * k
-        back[i] = cur
+    """Eases each step in before it is needed and out after: at every frame
+    the result is at least the step needed there (in its direction), and it
+    rises and falls smoothly over SMOOTH_S around it. Steps one way and the
+    other are eased apart and added."""
+    reach = max(1, int(round(SMOOTH_S * fps)))
+    weights = [_smooth(1 - d / reach) for d in range(reach + 1)]
+    n = len(values)
     out = []
-    for v, f, b in zip(values, fwd, back):
-        e = (f + b) / 2
-        # Keep at least the step needed, in its direction.
-        out.append(min(e, v) if v < 0 else max(e, v) if v > 0 else e)
+    for i in range(n):
+        up = down = 0.0
+        for j in range(max(0, i - reach), min(n, i + reach + 1)):
+            v = values[j] * weights[abs(i - j)]
+            up, down = max(up, v), min(down, v)
+        out.append(up + down)
     return out
+
+
+def _smooth(x):
+    x = min(1.0, max(0.0, x))
+    return x * x * x * (x * (x * 6 - 15) + 10)

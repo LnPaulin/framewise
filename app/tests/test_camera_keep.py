@@ -96,7 +96,7 @@ class SteerTests(unittest.TestCase):
         views = [(0.5, 0.5, 0.5, 0.5)] * 30
         out, _f = ck.steer(views, self.SPOT, self.WHOLE, 30)
         for v in out:
-            self.assertEqual(ck._overlap(v, self.SPOT[0][4]), 0)
+            self.assertLessEqual(ck._overlap(v, self.SPOT[0][4]), ck.EPS)
             self.assertAlmostEqual(v[2], 0.5)
 
     def test_clear_zoom_untouched(self):
@@ -119,7 +119,7 @@ class SteerTests(unittest.TestCase):
         box = self.SPOT[0][4]
         for v, f in zip(out, fades):
             # Either the zoomed picture is clear of the bubble, or it isn't zoomed at all.
-            self.assertTrue(ck._overlap(v, box) == 0 or v[2] >= 0.999, (v, f))
+            self.assertTrue(ck._overlap(v, box) <= ck.EPS or v[2] >= 0.999, (v, f))
         # The fade goes smoothly from the unzoomed picture to none.
         first = next(i for i, v in enumerate(views) if v[2] < 0.999)
         self.assertGreater(fades[first], 0.9)
@@ -147,15 +147,15 @@ class SteerTests(unittest.TestCase):
             out, _f = ck.steer(views, self.SPOT, self.WHOLE, 30)
             for v, orig in zip(out, views):
                 if v[2] < 0.999 and ck._first_clear(orig, box) is not None:
-                    self.assertEqual(ck._overlap(v, box), 0)
+                    self.assertLessEqual(ck._overlap(v, box), ck.EPS)
 
     def test_follows_a_moved_bubble(self):
         moved = [(0.0, 1.0, (0.8, 0.7, 0.15, 0.25), (0,) * 4, (0.78, 0.68, 0.19, 0.31)),
                  (1.0, 2.0, (0.05, 0.05, 0.15, 0.25), (0,) * 4, (0.03, 0.03, 0.19, 0.31))]
         views = [(0.5, 0.5, 0.5, 0.5)] * 30 + [(0.0, 0.0, 0.5, 0.5)] * 30
         out, _f = ck.steer(views, moved, self.WHOLE, 30)
-        self.assertEqual(ck._overlap(out[10], moved[0][4]), 0)
-        self.assertEqual(ck._overlap(out[50], moved[1][4]), 0)
+        self.assertLessEqual(ck._overlap(out[10], moved[0][4]), ck.EPS)
+        self.assertLessEqual(ck._overlap(out[50], moved[1][4]), ck.EPS)
 
 
 def _grey_at(path, t, x, y, w, h):
