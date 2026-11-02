@@ -180,7 +180,7 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         self.picture.on_pick = self._on_pick_spot
         self._load_controls_patch()
         from . import camera_keep
-        self.picture.set_camera(camera_keep.in_area(self.info, self.info.get("crop")))
+        self.camera_spots = camera_keep.in_area(self.info, self.info.get("crop"))
 
         # Transport
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic",
@@ -439,6 +439,12 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         group.append(self.zoom_switch)
         body.append(group)
         self.zoom_switch.connect("notify::active", self._on_zoom_enabled)
+        # Only for recordings that showed the camera bubble (camera_keep.py).
+        self.keep_camera_switch = Adw.SwitchRow(title="Camera stays in place",
+                                                subtitle="Off: the camera zooms with the screen")
+        self.keep_camera_switch.set_visible(bool(self.camera_spots))
+        group.append(self.keep_camera_switch)
+        self.keep_camera_switch.connect("notify::active", self._on_keep_camera)
         row = Gtk.Box(spacing=8)
         row.append(Gtk.Label(label="Zoom level", xalign=0, hexpand=True))
         self.zoom_amount_label = Gtk.Label(css_classes=["ck-editor-time", "dim-label"])
@@ -493,6 +499,11 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         if getattr(self, "_refreshing", False):
             return
         self._commit(self._zoom_doc(enabled=row.get_active()))
+
+    def _on_keep_camera(self, row, _p):
+        if getattr(self, "_refreshing", False):
+            return
+        self._commit(self._zoom_doc(keep_camera=row.get_active()))
 
     def _on_zoom_amount(self, scale):
         self.zoom_amount_label.set_label(f"{scale.get_value():.1f}×")
@@ -1282,6 +1293,8 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
             self.denoise_strength.set_selected(1 if self.doc["denoise"]["strength"] == "strong" else 0)
         z = self.doc["zoom"]
         self.zoom_switch.set_active(z["enabled"])
+        self.keep_camera_switch.set_active(z.get("keep_camera", True))
+        self.picture.set_camera(self.camera_spots if z.get("keep_camera", True) else [])
         self.zoom_amount.set_value(z["amount"])
         self.zoom_amount_label.set_label(f"{z['amount']:.1f}×")
         self.lane.set_segments(z["segments"] if z["enabled"] else [], self.clicks)

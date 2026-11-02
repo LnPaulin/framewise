@@ -279,9 +279,10 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, ta
                                  doc["zoom"]["amount"], samples, duration, fps, typing=typing)
         plan["zoom_views"] = views
         # The camera bubble stays where it was, unzoomed (camera_keep.py).
-        from . import camera_keep
-        plan["camera"] = camera_keep.export_spots(take_info, crop_fraction, base, lay["rect"],
-                                                  area, work_dir)
+        if doc["zoom"].get("keep_camera", True):
+            from . import camera_keep
+            plan["camera"] = camera_keep.export_spots(take_info, crop_fraction, base, lay["rect"],
+                                                      area, work_dir)
     plan["assets"] = render_assets(doc, lay, work_dir, take_dir)
     plan["pointer"] = None
     ptr_doc = doc.get("pointer") or {}
@@ -517,8 +518,11 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
         for k, c in enumerate(cams):
             if c.get("fill"):
                 x, y, w, h = c["fill"]
-                parts.append(f"[{cur}]delogo=x={x}:y={y}:w={w}:h={h}:"
-                             f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'[cf{k}]")
+                on = f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'"
+                # Then blurred, so lines at its edges don't streak across it.
+                parts.append(f"[{cur}]delogo=x={x}:y={y}:w={w}:h={h}:{on},split[cfa{k}][cfb{k}];"
+                             f"[cfb{k}]crop={w}:{h}:{x}:{y},gblur=sigma={c['sigma']:.1f}[cfl{k}];"
+                             f"[cfa{k}][cfl{k}]overlay={x}:{y}:{on}[cf{k}]")
                 cur = f"cf{k}"
     p = plan.get("pointer")
     if p:

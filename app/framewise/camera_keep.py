@@ -103,6 +103,11 @@ def in_area(take_info, crop_fraction=None):
     return out
 
 
+def fill_sigma(w, h):
+    """How strongly the filled-in spot is blurred (pixels of the take)."""
+    return max(2.0, min(w, h) / 5)
+
+
 def mask(w, h, radii_px):
     """A white-on-black picture of the camera's shape (h x w uint8), softened
     by one pixel at the edge."""
@@ -159,5 +164,6 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
         fy1 = min(ay + ah - 1, int(math.ceil(ay + (outer[1] + outer[3]) * ah)))
         fill = (fx0, fy0, fx1 - fx0, fy1 - fy0) if fx1 - fx0 >= 4 and fy1 - fy0 >= 4 else None
         spots.append({"start": start, "end": end, "crop": (cx0, cy0, cw, ch),
-                      "at": (ox, oy), "size": (ow, oh), "mask": str(path), "fill": fill})
+                      "at": (ox, oy), "size": (ow, oh), "mask": str(path), "fill": fill,
+                      "sigma": fill_sigma(fill[2], fill[3]) if fill else 0})
     return spots

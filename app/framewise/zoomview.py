@@ -191,7 +191,11 @@ class ZoomView(Gtk.Widget):
         if g[2] < 1 or g[3] < 1:
             return
         ex, ey = 2 / self.src_size[0], 2 / self.src_size[1]     # two pixels of the recording
+        from . import camera_keep
+        sigma = camera_keep.fill_sigma(gw * self.src_size[0], gh * self.src_size[1])
+        radius = sigma * box[2] / (view[2] * self.src_size[0])
         snap.push_clip(_rect(*g))
+        snap.push_blur(max(2.0, radius * 2))     # as the saved video blurs it
         for edges, horizontal, opacity in (
                 (((gx - ex, gy, ex, gh), (gx + gw, gy, ex, gh)), True, 1.0),
                 (((gx, gy - ey, gw, ey), (gx, gy + gh, gw, ey)), False, 0.5)):
@@ -213,6 +217,7 @@ class ZoomView(Gtk.Widget):
             snap.pop()
             if opacity < 1:
                 snap.pop()
+        snap.pop()
         snap.pop()
 
     def set_pointer(self, pointer_data):

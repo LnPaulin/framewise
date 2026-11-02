@@ -116,10 +116,10 @@ class ExportTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def _save(self, info, focus=(0.1, 0.1)):
+    def _save(self, info, focus=(0.1, 0.1), keep=True):
         from gi.repository import GLib
         doc = em.new_document(2.0)
-        doc["zoom"].update(enabled=True, amount=2.0,
+        doc["zoom"].update(enabled=True, amount=2.0, keep_camera=keep,
                            segments=[{"start": 0.1, "end": 1.9, "focus": list(focus)}])
         doc = em.normalize(doc, 2.0)
         loop, result = GLib.MainLoop(), {}
@@ -151,6 +151,11 @@ class ExportTests(unittest.TestCase):
         out = self._save(self.info, focus=(0.84, 0.78))
         self.assertLess(_grey_at(out, 1.0, 340, 100, 120, 100), 200)
         self.assertGreater(_grey_at(out, 1.0, 500, 240, 80, 80), 230)   # the kept one
+
+
+    def test_switched_off_camera_zooms_with_screen(self):
+        out = self._save(self.info, keep=False)
+        self.assertLess(_grey_at(out, 1.0, 500, 240, 80, 80), 200)
 
 
 class SoftwareExportTests(ExportTests):
