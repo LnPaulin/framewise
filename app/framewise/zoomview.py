@@ -160,12 +160,13 @@ class ZoomView(Gtk.Widget):
         self.camera = list(spots or [])
         self.queue_draw()
 
-    def _draw_camera(self, snap, t, box, whole):
+    def _draw_camera(self, snap, t, box, view, whole):
         if not self.views:
             return
-        for start, end, (x, y, w, h), radii in self.camera:
+        for start, end, (x, y, w, h), radii, outer in self.camera:
             if not (start <= t <= end):
                 continue
+            self._fill_in(snap, box, view, outer)
             ex = box[0] + (x - whole[0]) / whole[2] * box[2]
             ey = box[1] + (y - whole[1]) / whole[3] * box[3]
             ew, eh = w / whole[2] * box[2], h / whole[3] * box[3]
@@ -179,6 +180,40 @@ class ZoomView(Gtk.Widget):
             snap.push_rounded_clip(shape)
             self._draw_video(snap, box, whole)
             snap.pop()
+
+    def _fill_in(self, snap, box, view, outer):
+        """Covers the zoomed copy of the bubble with the picture around it,
+        stretched across (left to right, then top to bottom at half
+        strength), like the saved video's fill (ffmpeg's delogo)."""
+        gx, gy, gw, gh = outer
+        g = (box[0] + (gx - view[0]) / view[2] * box[2], box[1] + (gy - view[1]) / view[3] * box[3],
+             gw / view[2] * box[2], gh / view[3] * box[3])
+        if g[2] < 1 or g[3] < 1:
+            return
+        ex, ey = 2 / self.src_size[0], 2 / self.src_size[1]     # two pixels of the recording
+        snap.push_clip(_rect(*g))
+        for edges, horizontal, opacity in (
+                (((gx - ex, gy, ex, gh), (gx + gw, gy, ex, gh)), True, 1.0),
+                (((gx, gy - ey, gw, ey), (gx, gy + gh, gw, ey)), False, 0.5)):
+            if opacity < 1:
+                snap.push_opacity(opacity)
+            self._draw_video(snap, g, edges[0])
+            snap.push_mask(Gsk.MaskMode.ALPHA)
+            a, b = Graphene.Point(), Graphene.Point()
+            a.init(g[0], g[1])
+            b.init(g[0] + g[2], g[1]) if horizontal else b.init(g[0], g[1] + g[3])
+            stops = []
+            for offset, alpha in ((0.0, 0.0), (1.0, 1.0)):
+                stop = Gsk.ColorStop()
+                stop.offset, stop.color = offset, _rgba(0, 0, 0, alpha)
+                stops.append(stop)
+            snap.append_linear_gradient(_rect(*g), a, b, stops)
+            snap.pop()
+            self._draw_video(snap, g, edges[1])
+            snap.pop()
+            if opacity < 1:
+                snap.pop()
+        snap.pop()
 
     def set_pointer(self, pointer_data):
         self.pointer = pointer_data
@@ -323,7 +358,7 @@ class ZoomView(Gtk.Widget):
             self._draw_video(snap, box, view)
             snap.pop()
             snap.pop()
-        self._draw_camera(snap, t, box, (sx, sy, sw, sh))
+        self._draw_camera(snap, t, box, view, (sx, sy, sw, sh))
         if self.pointer:
             self._draw_pointer(snap, t, box, view)
         snap.pop()

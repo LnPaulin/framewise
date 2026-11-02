@@ -53,6 +53,7 @@ class TrackTests(unittest.TestCase):
         self.assertEqual(info[0]["end"], 3.0)
         self.assertEqual(info[0]["rect"], [0.1, 0.1, 0.2, 0.4])
         self.assertEqual(info[0]["radii"], [0.5, 0.5, 0.5, 0.5])
+        self.assertEqual(info[0]["shadow"], [0.018, 0.028, 0.018, 0.064])
 
     def test_screen_box(self):
         box = ck.screen_box((1000, 600, 300, 300), ((14.0, 14.0, 272.0, 272.0), (136, 136, 136, 136)))
@@ -66,6 +67,9 @@ class AreaTests(unittest.TestCase):
     def test_whole_screen(self):
         (spot,) = ck.in_area(self.INFO)
         self.assertEqual(spot[2], (0.75, 0.5, 0.2, 0.4))
+        outer = spot[4]
+        self.assertLess(outer[0], 0.75)
+        self.assertGreater(outer[1] + outer[3], 0.9)          # the shadow below
 
     def test_area_crop(self):
         (spot,) = ck.in_area(self.INFO, (0.5, 0.5, 0.5, 0.5))
@@ -112,11 +116,11 @@ class ExportTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def _save(self, info):
+    def _save(self, info, focus=(0.1, 0.1)):
         from gi.repository import GLib
         doc = em.new_document(2.0)
         doc["zoom"].update(enabled=True, amount=2.0,
-                           segments=[{"start": 0.1, "end": 1.9, "focus": [0.1, 0.1]}])
+                           segments=[{"start": 0.1, "end": 1.9, "focus": list(focus)}])
         doc = em.normalize(doc, 2.0)
         loop, result = GLib.MainLoop(), {}
 
@@ -139,6 +143,14 @@ class ExportTests(unittest.TestCase):
         self.assertGreater(_grey_at(out, 1.0, 500, 240, 80, 80), 230)
         # The rest is still zoomed: just outside the square is grey.
         self.assertLess(_grey_at(out, 1.0, 400, 240, 60, 80), 200)
+
+
+    def test_no_second_camera_when_zooming_near_it(self):
+        # Zoomed onto the camera: the view is the bottom-right quarter, where the
+        # enlarged camera would cover x 320..560, y 80..320 of the video.
+        out = self._save(self.info, focus=(0.84, 0.78))
+        self.assertLess(_grey_at(out, 1.0, 340, 100, 120, 100), 200)
+        self.assertGreater(_grey_at(out, 1.0, 500, 240, 80, 80), 230)   # the kept one
 
 
 class SoftwareExportTests(ExportTests):

@@ -6,10 +6,13 @@ push it out of the picture. While recording, where the bubble's picture is
 on screen is noted (take.json "camera"); the editor preview and the saved
 video then draw that part of the recording again over the zoomed picture,
 unzoomed, in the same place, so the camera stays put whatever the zoom does.
+Under it, the bubble (with its shadow) is first filled in from the colours
+around it, so the zoomed picture doesn't show a second, enlarged camera.
 """
 
 import math
 
+SHADOW = (18, 14, 18, 32)   # screen pixels the bubble's shadow reaches: left, top, right, bottom
 POLL_MS = 500          # how often the bubble's place is checked while recording
 MAX_SPOTS = 40         # a bubble moved around a lot: only the first places are kept
 
@@ -57,10 +60,12 @@ class Track:
             b = _recording_time(runs, end if end is not None else end_mono, forward=False)
             if a is None or b is None or b - a < 0.05 or w <= 0:
                 continue
+            sl, st, sr, sb = SHADOW
             out.append({"start": round(a, 3), "end": round(b, 3),
                         "rect": [round((x - gx) / gw, 5), round((y - gy) / gh, 5),
                                  round(w / gw, 5), round(h / gh, 5)],
-                        "radii": [round(r / w, 4) for r in radii]})
+                        "radii": [round(r / w, 4) for r in radii],
+                        "shadow": [round(sl / gw, 5), round(st / gh, 5), round(sr / gw, 5), round(sb / gh, 5)]})
         return out or None
 
 
@@ -81,7 +86,8 @@ def _recording_time(runs, mono, forward):
 
 def in_area(take_info, crop_fraction=None):
     """The spots as fractions of the recorded area (what the editor shows):
-    [(start, end, (x, y, w, h), radii as fractions of the width)]."""
+    [(start, end, (x, y, w, h), radii as fractions of the width, outer)],
+    outer being the picture with its shadow (x, y, w, h): the part filled in."""
     cx, cy, cw, ch = crop_fraction or (0.0, 0.0, 1.0, 1.0)
     out = []
     for s in (take_info or {}).get("camera") or ():
@@ -89,7 +95,11 @@ def in_area(take_info, crop_fraction=None):
         x, y, w, h = (fx - cx) / cw, (fy - cy) / ch, fw / cw, fh / ch
         if x >= 1 or y >= 1 or x + w <= 0 or y + h <= 0:
             continue                       # not in the recorded area
-        out.append((s["start"], s["end"], (x, y, w, h), tuple(s.get("radii") or (0, 0, 0, 0))))
+        # Older takes didn't note the shadow: about that much of a usual bubble.
+        sl, st, sr, sb = s.get("shadow") or (0.07 * fw, 0.055 * fh, 0.07 * fw, 0.12 * fh)
+        ox, oy = max(0.0, x - sl / cw), max(0.0, y - st / ch)
+        outer = (ox, oy, min(1.0, x + w + sr / cw) - ox, min(1.0, y + h + sb / ch) - oy)
+        out.append((s["start"], s["end"], (x, y, w, h), tuple(s.get("radii") or (0, 0, 0, 0)), outer))
     return out
 
 
@@ -121,7 +131,7 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
     _rx, _ry, rw, rh = out_rect
     kx, ky = rw / bw, rh / bh
     spots = []
-    for k, (start, end, (x, y, w, h), radii) in enumerate(in_area(take_info, crop_fraction)):
+    for k, (start, end, (x, y, w, h), radii, outer) in enumerate(in_area(take_info, crop_fraction)):
         # In take pixels, then only the part inside the shown picture.
         x0, y0 = ax + x * aw, ay + y * ah
         x1, y1 = x0 + w * aw, y0 + h * ah
@@ -143,6 +153,11 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
                                       cv2.BORDER_REPLICATE)
         path = Path(work_dir) / f"camera_mask_{k}.png"
         cv2.imwrite(str(path), part)
+        # The part filled in under it (ffmpeg's delogo needs a pixel of border).
+        fx0, fy0 = max(1, int(ax + outer[0] * aw)), max(1, int(ay + outer[1] * ah))
+        fx1 = min(ax + aw - 1, int(math.ceil(ax + (outer[0] + outer[2]) * aw)))
+        fy1 = min(ay + ah - 1, int(math.ceil(ay + (outer[1] + outer[3]) * ah)))
+        fill = (fx0, fy0, fx1 - fx0, fy1 - fy0) if fx1 - fx0 >= 4 and fy1 - fy0 >= 4 else None
         spots.append({"start": start, "end": end, "crop": (cx0, cy0, cw, ch),
-                      "at": (ox, oy), "size": (ow, oh), "mask": str(path)})
+                      "at": (ox, oy), "size": (ow, oh), "mask": str(path), "fill": fill})
     return spots

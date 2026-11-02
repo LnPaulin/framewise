@@ -512,6 +512,14 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
             parts.append(f"[cs{k}]crop={w}:{h}:{x}:{y},scale={ow}:{oh}:flags=lanczos,format=yuva420p[cv{k}];"
                          f"[{idx}:v]format=gray[ck{k}];[cv{k}][ck{k}]alphamerge[ca{k}]")
             idx += 1
+        # Under it, the bubble is filled in from around it, so the zoomed picture
+        # doesn't show it a second time, enlarged.
+        for k, c in enumerate(cams):
+            if c.get("fill"):
+                x, y, w, h = c["fill"]
+                parts.append(f"[{cur}]delogo=x={x}:y={y}:w={w}:h={h}:"
+                             f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'[cf{k}]")
+                cur = f"cf{k}"
     p = plan.get("pointer")
     if p:
         # The pointer (and ring) go on the recording itself, before the zoom,
