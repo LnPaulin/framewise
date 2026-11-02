@@ -67,16 +67,18 @@ class Sharing:
     """The server for one item. on_event(kind, detail) runs on the main loop:
     ("opened", phone address), ("downloaded", phone address), ("stopped", None)."""
 
-    def __init__(self, item, on_event=None, lifetime=LIFETIME, host=None, bind="0.0.0.0"):
+    def __init__(self, item, on_event=None, lifetime=LIFETIME, host=None, bind=None):
         """host: the address put in the link (the local network one by default);
-        bind: where the server listens (tests use 127.0.0.1)."""
+        bind: where the server listens: only that address by default, so it
+        can't be reached through the computer's other networks (a VPN, a
+        second network card). Tests use 127.0.0.1."""
         self.item = item
         self.on_event = on_event
         self.token = secrets.token_urlsafe(16)
         self.host = host or local_address()
         if self.host is None:
             raise OSError("This computer isn't connected to a network")
-        self._server = ThreadingHTTPServer((bind, 0), self._handler())
+        self._server = ThreadingHTTPServer((bind or self.host, 0), self._handler())
         self._server.daemon_threads = True
         self.port = self._server.server_address[1]
         self.expires = time.monotonic() + lifetime
