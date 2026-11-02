@@ -232,7 +232,8 @@ class Session:
                 "cursor": getattr(self, "cursor", "embedded"),
                 "system_audio": settings.get("system_audio"),
                 "microphone": settings.get("microphone"),
-                "controls": getattr(self, "controls_info", None)}
+                "controls": getattr(self, "controls_info", None),
+                "camera": getattr(self, "camera_info", None)}
 
     def _show_border(self, window_mode):
         """A red border marking what is recorded, drawn by the extension."""
@@ -275,6 +276,7 @@ class Session:
         if self.app.bubble:
             self.app.keep_camera_above()
         self.controls_info = None
+        self._start_camera_track()
         if self.use_shell:
             # Controls in the top bar, where no window can cover them. To keep
             # them out of the video they appear a moment later (the first
@@ -289,6 +291,43 @@ class Session:
             self.pill.present()
         self.tick = GLib.timeout_add(250, self._update_pill)
         return False
+
+    # ---- where the camera bubble is (camera_keep.py) --------------------------------
+
+    def _start_camera_track(self):
+        self.camera_info = None
+        self.camera_track = None
+        if self.window_mode or not (self.use_shell and self.shell.has_bubble_rect):
+            return
+        from . import camera_keep
+        self.camera_track = camera_keep.Track()
+        self._poll_camera()
+        self._camera_timer = GLib.timeout_add(camera_keep.POLL_MS, self._poll_camera)
+
+    def _poll_camera(self):
+        import time
+        from . import camera_keep
+        track = getattr(self, "camera_track", None)
+        if track is None or self.phase != self.RECORDING:
+            self._camera_timer = 0
+            return False
+        bubble = self.app.bubble
+        box = None
+        if bubble is not None and bubble.get_visible():
+            box = camera_keep.screen_box(self.shell.bubble_rect(), bubble.picture_box())
+        track.add(time.monotonic(), box)
+        return True
+
+    def _stop_camera_track(self):
+        import time
+        track, self.camera_track = getattr(self, "camera_track", None), None
+        if getattr(self, "_camera_timer", 0):
+            GLib.source_remove(self._camera_timer)
+        self._camera_timer = 0
+        if track is None or not self.recorder:
+            return
+        g = self.monitor.get_geometry()
+        self.camera_info = track.info(self.recorder.runs, (g.x, g.y, g.width, g.height), time.monotonic())
 
     def _show_shell_controls(self):
         if self.phase == self.RECORDING:
@@ -331,6 +370,7 @@ class Session:
         if self.phase == self.RECORDING:
             self.phase = self.SAVING
             self._close_pill()
+            self._stop_camera_track()
             self.recorder.stop()
             self._save_pointer_track()
             # A camera bubble the recording opened goes away with it; one opened
@@ -465,6 +505,10 @@ class Session:
         self.phase = self.IDLE
         self.capture = self.recorder = self.take_dir = self.crop = None
         self.controls_info = None
+        if getattr(self, "_camera_timer", 0):
+            GLib.source_remove(self._camera_timer)
+        self._camera_timer = 0
+        self.camera_track = self.camera_info = None
         if was_active:
             self.app.release()
 

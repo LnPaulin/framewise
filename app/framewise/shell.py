@@ -254,6 +254,15 @@ class ShellHelper:
         res = self._call_sync("BubbleCorner", None, 1000)
         return res[0] if res else "bottom-right"
 
+    @property
+    def has_bubble_rect(self):
+        return self.version() >= (1, 14)
+
+    def bubble_rect(self):
+        """(x, y, w, h) of the camera bubble's window on screen, or None."""
+        res = self._call_sync("BubbleRect", None, 300)
+        return tuple(res) if res and res[2] > 0 and res[3] > 0 else None
+
     def set_bubble_aspect(self, ratio, margin):
         self._call("SetBubbleAspect", GLib.Variant("(di)", (float(ratio), int(margin))))
 

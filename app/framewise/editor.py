@@ -179,6 +179,8 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
         self.picture.on_click = self.player.toggle
         self.picture.on_pick = self._on_pick_spot
         self._load_controls_patch()
+        from . import camera_keep
+        self.picture.set_camera(camera_keep.in_area(self.info, self.info.get("crop")))
 
         # Transport
         self.play_btn = Gtk.Button(icon_name="media-playback-start-symbolic",

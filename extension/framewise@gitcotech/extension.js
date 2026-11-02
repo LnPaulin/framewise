@@ -36,7 +36,7 @@ import {TypingTracker} from './typing.js';
 const BUS_NAME = 'com.gitcotech.Framewise.Shell';
 const SAFE_SPEAKER_VOLUME = 0.3;   // speakers after headphones are unplugged (of 100%)
 const OBJECT_PATH = '/com/gitcotech/Framewise/Shell';
-const VERSION = '1.13';
+const VERSION = '1.14';
 const APP_ID = 'com.gitcotech.Framewise';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot');
@@ -157,6 +157,12 @@ const IFACE = `
     <method name="ShowClipboard"/>
     <method name="BubbleCorner">
       <arg type="s" direction="out" name="corner"/>
+    </method>
+    <method name="BubbleRect">
+      <arg type="i" direction="out" name="x"/>
+      <arg type="i" direction="out" name="y"/>
+      <arg type="i" direction="out" name="width"/>
+      <arg type="i" direction="out" name="height"/>
     </method>
     <method name="SetBubbleAspect">
       <arg type="d" direction="in" name="ratio"/>
@@ -497,6 +503,17 @@ export default class FramewiseExtension extends Extension {
     // follows it as the bubble moves).
     BubbleCorner() {
         return this._placement?.corner ?? 'bottom-right';
+    }
+
+    // Where the camera bubble's window is on screen (its whole surface, in
+    // logical pixels), or zeros when it isn't showing. Recordings note it so
+    // a zoom can leave the camera where it was.
+    BubbleRect() {
+        const win = global.display.list_all_windows().find(w => w.get_title() === 'framewise camera');
+        if (!win || win.minimized || !win.get_compositor_private()?.visible)
+            return [0, 0, 0, 0];
+        const r = win.get_buffer_rect();
+        return [r.x, r.y, r.width, r.height];
     }
 
     SetBubbleAspect(ratio, margin) {

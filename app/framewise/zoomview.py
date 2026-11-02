@@ -56,6 +56,7 @@ class ZoomView(Gtk.Widget):
         self.overlays = []       # [(item, texture, (x, y, w, h), opacity, fade)]
         self.blurs = []          # doc blur items
         self.patch = None        # (texture, (x, y, w, h) fractions): the recording controls, covered
+        self.camera = []         # camera bubble spots kept out of the zoom (camera_keep.in_area)
         self.caption_doc = None  # the edit, for its captions (captions.py)
         self.pointer = None      # {"frames", "rings", "texture", "pad", "px", "rings_on"}
         # Editing modes
@@ -152,6 +153,32 @@ class ZoomView(Gtk.Widget):
         snap.append_texture(texture, _rect(box[0] + (x - view[0]) / view[2] * box[2],
                                            box[1] + (y - view[1]) / view[3] * box[3],
                                            w / view[2] * box[2], h / view[3] * box[3]))
+
+    def set_camera(self, spots):
+        """Where the camera bubble was: drawn again unzoomed over a zoom, as the
+        saved video does (camera_keep.py)."""
+        self.camera = list(spots or [])
+        self.queue_draw()
+
+    def _draw_camera(self, snap, t, box, whole):
+        if not self.views:
+            return
+        for start, end, (x, y, w, h), radii in self.camera:
+            if not (start <= t <= end):
+                continue
+            ex = box[0] + (x - whole[0]) / whole[2] * box[2]
+            ey = box[1] + (y - whole[1]) / whole[3] * box[3]
+            ew, eh = w / whole[2] * box[2], h / whole[3] * box[3]
+            corners = []
+            for r in radii:
+                size = Graphene.Size()
+                size.init(r * ew, r * ew)
+                corners.append(size)
+            shape = Gsk.RoundedRect()
+            shape.init(_rect(ex, ey, ew, eh), *corners)
+            snap.push_rounded_clip(shape)
+            self._draw_video(snap, box, whole)
+            snap.pop()
 
     def set_pointer(self, pointer_data):
         self.pointer = pointer_data
@@ -296,6 +323,7 @@ class ZoomView(Gtk.Widget):
             self._draw_video(snap, box, view)
             snap.pop()
             snap.pop()
+        self._draw_camera(snap, t, box, (sx, sy, sw, sh))
         if self.pointer:
             self._draw_pointer(snap, t, box, view)
         snap.pop()

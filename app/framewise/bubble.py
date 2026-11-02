@@ -309,6 +309,17 @@ class CameraBubble(Gtk.Window):
         surface.set_input_region(region)
         return False
 
+    def picture_box(self):
+        """Where the camera picture is inside this window (x, y, w, h) and its
+        corner radii (top-left, top-right, bottom-right, bottom-left), or None."""
+        ok, bounds = self.frame.compute_bounds(self)
+        if not ok or not self.frame.get_mapped():
+            return None
+        w, h = bounds.get_width(), bounds.get_height()
+        if w < 2 or h < 2:
+            return None
+        return (bounds.get_x(), bounds.get_y(), w, h), self._radii(w, h)
+
     def _radii(self, w, h):
         """Corner radii of the picture: top-left, top-right, bottom-right, bottom-left."""
         if self.shape == "circle":

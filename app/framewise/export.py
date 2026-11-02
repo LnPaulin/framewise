@@ -253,7 +253,7 @@ def write_commands(plan, fps):
         p["ring_y_expr"] = ptr.step_expr(steps_y)
 
 
-def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir):
+def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, take_info=None):
     """Everything the export needs to draw the finished picture.
 
     Shares compose.layout and the rendered images with the editor preview,
@@ -278,6 +278,10 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir):
         views = motion.viewports(segments_in_base(doc["zoom"]["segments"], lay["source"]),
                                  doc["zoom"]["amount"], samples, duration, fps, typing=typing)
         plan["zoom_views"] = views
+        # The camera bubble stays where it was, unzoomed (camera_keep.py).
+        from . import camera_keep
+        plan["camera"] = camera_keep.export_spots(take_info, crop_fraction, base, lay["rect"],
+                                                  area, work_dir)
     plan["assets"] = render_assets(doc, lay, work_dir, take_dir)
     plan["pointer"] = None
     ptr_doc = doc.get("pointer") or {}
@@ -494,6 +498,20 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
         parts.append(f"[{cur}]split[ba{k}][bb{k}];[bb{k}]crop={w}:{h}:{x}:{y},gblur=sigma={b['sigma']:.1f}[bl{k}];"
                      f"[ba{k}][bl{k}]overlay={x}:{y}:enable='between(t,{b['start']:.3f},{b['end']:.3f})'[cb{k}]")
         cur = f"cb{k}"
+    cams = plan.get("camera") or []
+    if cams:
+        # The camera bubble, cut from the picture before the zoom, goes back on
+        # top after it, unzoomed (a drawn pointer passing over it goes under it).
+        outs = "".join(f"[cs{k}]" for k in range(len(cams)))
+        parts.append(f"[{cur}]split={len(cams) + 1}[cm]{outs}")
+        cur = "cm"
+        for k, c in enumerate(cams):
+            x, y, w, h = c["crop"]
+            ow, oh = c["size"]
+            inputs += loop(c["mask"])
+            parts.append(f"[cs{k}]crop={w}:{h}:{x}:{y},scale={ow}:{oh}:flags=lanczos,format=yuva420p[cv{k}];"
+                         f"[{idx}:v]format=gray[ck{k}];[cv{k}][ck{k}]alphamerge[ca{k}]")
+            idx += 1
     p = plan.get("pointer")
     if p:
         # The pointer (and ring) go on the recording itself, before the zoom,
@@ -514,6 +532,11 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
     send = f"sendcmd=f='{plan['commands']}'," if plan.get("has_commands") else ""
     parts.append(f"[{cur}]{send}crop@zoom={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=lanczos,setsar=1[vs]")
     cur = "vs"
+    for k, c in enumerate(cams):
+        ox, oy = c["at"]
+        parts.append(f"[{cur}][ca{k}]overlay={ox}:{oy}:"
+                     f"enable='between(t,{c['start']:.3f},{c['end']:.3f})'[vk{k}]")
+        cur = f"vk{k}"
 
     assets = plan["assets"]
     if assets["background"]:
@@ -908,7 +931,7 @@ def save_async(take, dest, crop_fraction, on_done, doc=None, take_info=None,
     names = track_names(info, count)
     plan = None
     if em.has_zoom(doc) or em.needs_compose(doc):
-        plan = plan_picture(Path(take).parent, doc, crop_fraction, size, duration, fps, work)
+        plan = plan_picture(Path(take).parent, doc, crop_fraction, size, duration, fps, work, info)
         plan["patch"] = patch
     mic_clean = None
     if (doc.get("denoise") or {}).get("mic"):
