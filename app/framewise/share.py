@@ -1,4 +1,5 @@
-"""Send to phone: a file, a picture or some text, to a phone on the same Wi-Fi.
+"""Send to phone: a file, a picture or some text, to a phone on the same Wi-Fi;
+and the other way: files and text from the phone to this computer.
 
 A small web server runs on this computer while the Send to Phone window is
 open (at most LIFETIME seconds). It answers only one secret address, made
@@ -9,7 +10,9 @@ Nothing goes through the internet.
 
 import html
 import mimetypes
+import os
 import secrets
+import shutil
 import socket
 import threading
 import time
@@ -206,6 +209,292 @@ document.querySelector('button').textContent='Copied';}}</script></body></html>"
             return                      # the phone stopped (or only peeked)
         if attach:
             self._emit("downloaded", req.client_address[0])
+
+
+# ---- receiving: files and text from the phone ---------------------------------------------
+
+MAX_TEXT = 1_000_000            # bytes of text the phone can send at once
+KEEP_FREE = 1_000_000_000       # bytes left free on the disk: bigger uploads are refused
+PART = ".framewise-part"
+
+
+def safe_name(name):
+    """A plain file name from what the phone says, never a path: no folders,
+    no hidden or control characters, not too long."""
+    name = str(name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    name = "".join(c for c in name if c.isprintable() and c not in '<>:"|?*').strip().lstrip(".").strip()
+    if len(name.encode()) > 150:
+        stem, dot, ext = name.rpartition(".")
+        if not dot or len(ext) > 10:
+            stem, ext = name, ""
+        while len((stem + "." + ext if ext else stem).encode()) > 150:
+            stem = stem[:-1]
+        name = f"{stem}.{ext}" if ext else stem
+    return name or "File from phone"
+
+
+def unique_path(folder, name):
+    """folder/name, or "name (2).ext"... when that is taken (never overwrites)."""
+    path = Path(folder) / name
+    stem, suffix = path.stem, path.suffix
+    n = 2
+    while path.exists() or path.with_name(path.name + PART).exists():
+        path = Path(folder) / f"{stem} ({n}){suffix}"
+        n += 1
+    return path
+
+
+class Receiving:
+    """A server that takes files and text from a phone, for as long as the
+    window is open (it stops after LIFETIME without anything arriving).
+    Files are written into folder as they arrive and are never opened.
+    on_event(kind, detail) runs on the main loop: ("opened", phone address),
+    ("receiving", name), ("received", path), ("failed", name), ("text", text),
+    ("stopped", None)."""
+
+    def __init__(self, folder, on_event=None, lifetime=LIFETIME, host=None, bind=None):
+        self.folder = Path(folder)
+        self.on_event = on_event
+        self.lifetime = lifetime
+        self.token = secrets.token_urlsafe(16)
+        self.host = host or local_address()
+        if self.host is None:
+            raise OSError("This computer isn't connected to a network")
+        self._lock = threading.Lock()
+        self._busy = 0
+        self._last = time.monotonic()
+        self.stopped = False
+        self._server = ThreadingHTTPServer((bind or self.host, 0), self._handler())
+        self._server.daemon_threads = True
+        self.port = self._server.server_address[1]
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        self._timer = None
+        self._watch()
+
+    @property
+    def url(self):
+        return f"http://{self.host}:{self.port}/{self.token}/"
+
+    @property
+    def expires(self):
+        return self._last + self.lifetime
+
+    def _watch(self):
+        if self.stopped:
+            return
+        if self._busy == 0 and time.monotonic() >= self.expires:
+            self.stop()
+            return
+        self._timer = threading.Timer(min(30, self.lifetime), self._watch)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def stop(self):
+        if self.stopped:
+            return
+        self.stopped = True
+        if self._timer:
+            self._timer.cancel()
+        threading.Thread(target=self._server.shutdown, daemon=True).start()
+        self._server.server_close()
+        self._emit("stopped", None)
+
+    def _emit(self, kind, detail):
+        if self.on_event:
+            from gi.repository import GLib
+            GLib.idle_add(lambda: self.on_event(kind, detail) and False)
+
+    def _handler(self):
+        receiving = self
+
+        class Handler(BaseHTTPRequestHandler):
+            server_version = "Framewise"
+            sys_version = ""
+
+            def log_message(self, *_args):
+                pass
+
+            def do_GET(self):
+                receiving._get(self)
+
+            def do_PUT(self):
+                receiving._put(self)
+
+            def do_POST(self):
+                receiving._post(self)
+
+        return Handler
+
+    def _route(self, req):
+        """The part of the path after the token, or None (answered 404)."""
+        base = f"/{self.token}/"
+        path = urllib.parse.urlsplit(req.path).path
+        if self.stopped or not path.startswith(base):
+            req.send_error(404)
+            return None
+        return path[len(base):]
+
+    def _only(self, req, rest):
+        """True when the request is for <token>/rest; otherwise it is answered 404."""
+        got = self._route(req)
+        if got is None:
+            return False
+        if got != rest:
+            req.send_error(404)
+            return False
+        return True
+
+    def _get(self, req):
+        if not self._only(req, ""):
+            return
+        data = UPLOAD_PAGE.encode()
+        req.send_response(200)
+        req.send_header("Content-Type", "text/html; charset=utf-8")
+        req.send_header("Content-Length", str(len(data)))
+        req.send_header("Cache-Control", "no-store")
+        req.send_header("Referrer-Policy", "no-referrer")
+        req.end_headers()
+        req.wfile.write(data)
+        self._last = time.monotonic()
+        self._emit("opened", req.client_address[0])
+
+    def _length(self, req):
+        try:
+            n = int(req.headers.get("Content-Length", ""))
+        except ValueError:
+            return None
+        return n if n >= 0 else None
+
+    def _put(self, req):
+        """PUT <token>/file?name=...: the file's bytes, as they are."""
+        if not self._only(req, "file"):
+            return
+        size = self._length(req)
+        if size is None:
+            req.send_error(411)            # the size must be given up front
+            return
+        name = safe_name(urllib.parse.parse_qs(urllib.parse.urlsplit(req.path).query).get("name", [""])[0])
+        try:
+            self.folder.mkdir(parents=True, exist_ok=True)
+            free = shutil.disk_usage(self.folder).free
+        except OSError:
+            req.send_error(500, "The folder for received files can't be used")
+            return
+        if size > free - KEEP_FREE:
+            req.send_error(507, "Not enough space on the computer")
+            return
+        with self._lock:
+            final = unique_path(self.folder, name)
+            part = final.with_name(final.name + PART)
+            try:
+                fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            except OSError:
+                req.send_error(500)
+                return
+            self._busy += 1
+        self._emit("receiving", final.name)
+        ok = False
+        try:
+            with os.fdopen(fd, "wb") as f:
+                left = size
+                while left > 0:
+                    chunk = req.rfile.read(min(CHUNK, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+                    self._last = time.monotonic()
+            ok = left == 0
+            if ok:
+                with self._lock:
+                    if final.exists():         # taken meanwhile: never overwrite
+                        final = unique_path(self.folder, final.name)
+                    os.rename(part, final)
+        except OSError:
+            ok = False
+        finally:
+            with self._lock:
+                self._busy -= 1
+            self._last = time.monotonic()
+            if not ok:
+                try:
+                    part.unlink()
+                except OSError:
+                    pass
+        if ok:
+            req.send_response(200)
+            req.send_header("Content-Length", "0")
+            req.end_headers()
+            self._emit("received", str(final))
+        else:
+            self._emit("failed", final.name)
+            try:
+                req.send_error(400, "The file didn't arrive whole")
+            except OSError:
+                pass
+
+    def _post(self, req):
+        """POST <token>/text: some text (UTF-8)."""
+        if not self._only(req, "text"):
+            return
+        size = self._length(req)
+        if size is None or size > MAX_TEXT:
+            req.send_error(413 if size else 411)
+            return
+        text = req.rfile.read(size).decode("utf-8", "replace")
+        self._last = time.monotonic()
+        req.send_response(200)
+        req.send_header("Content-Length", "0")
+        req.end_headers()
+        if text.strip():
+            self._emit("text", text)
+
+
+UPLOAD_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Send to your computer · Framewise</title><style>
+body{font-family:system-ui,sans-serif;margin:0;padding:28px 20px;background:#f6f5f4;color:#222;text-align:center}
+@media (prefers-color-scheme:dark){body{background:#1e1e22;color:#eee} textarea{background:#2a2a30;color:#eee}}
+h1{font-size:15px;font-weight:600;opacity:.6;margin:0 0 20px}
+.button,button{display:inline-block;background:#3584e4;color:#fff;border:0;border-radius:12px;
+padding:14px 34px;font-size:17px;font-weight:600;text-decoration:none;cursor:pointer}
+button{font-family:inherit} button.second{background:transparent;color:inherit;border:1px solid rgba(127,127,127,.5);padding:10px 24px;font-size:15px}
+textarea{width:100%;box-sizing:border-box;height:20vh;font:16px/1.45 system-ui,sans-serif;border-radius:12px;padding:12px;
+border:1px solid rgba(0,0,0,.15);margin:28px 0 10px}
+ul{list-style:none;padding:0;margin:22px 0 0;text-align:left}
+li{background:rgba(127,127,127,.12);border-radius:10px;padding:10px 12px;margin:8px 0;word-break:break-all}
+li small{display:block;opacity:.65;margin-top:3px}
+progress{width:100%;height:6px;margin-top:6px}
+input{display:none}
+</style></head><body><h1>To your computer, with Framewise</h1>
+<label class="button" for="files">Choose Files</label>
+<input id="files" type="file" multiple>
+<ul id="list"></ul>
+<textarea id="text" placeholder="Or type or paste text or a link"></textarea>
+<button class="second" id="send-text">Send Text</button>
+<script>
+const list=document.getElementById('list');
+function row(name){const li=document.createElement('li');li.textContent=name;
+const s=document.createElement('small');li.appendChild(s);const p=document.createElement('progress');
+p.max=1;p.value=0;li.appendChild(p);list.appendChild(li);return {s,p};}
+let queue=Promise.resolve();
+document.getElementById('files').addEventListener('change',e=>{
+for(const f of e.target.files){const r=row(f.name);r.s.textContent='Waiting…';
+queue=queue.then(()=>new Promise(done=>{const x=new XMLHttpRequest();
+x.open('PUT','file?name='+encodeURIComponent(f.name));
+x.upload.onprogress=ev=>{if(ev.lengthComputable){r.p.value=ev.loaded/ev.total;
+r.s.textContent=Math.round(100*ev.loaded/ev.total)+'%';}};
+x.onload=()=>{r.p.remove();r.s.textContent=x.status==200?'Sent ✓':(x.status==507?'Not enough space on the computer':'Not sent');done();};
+x.onerror=()=>{r.p.remove();r.s.textContent='Not sent: the computer can’t be reached';done();};
+r.s.textContent='Sending…';x.send(f);}));}
+e.target.value='';});
+document.getElementById('send-text').addEventListener('click',()=>{
+const t=document.getElementById('text');if(!t.value.trim())return;const r=row('Text');
+fetch('text',{method:'POST',body:t.value}).then(x=>{r.p.remove();
+r.s.textContent=x.ok?'Sent ✓ (on the computer’s clipboard)':'Not sent';if(x.ok)t.value='';})
+.catch(()=>{r.p.remove();r.s.textContent='Not sent: the computer can’t be reached';});});
+</script></body></html>"""
 
 
 def qr_texture(text, size=320):

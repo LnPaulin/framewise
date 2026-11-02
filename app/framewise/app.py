@@ -35,6 +35,7 @@ USAGE = """Usage: framewise              open the Framewise window
        framewise draw
        framewise fit [VIDEO]
        framewise send [FILE...]
+       framewise receive
        framewise scroll
        framewise pdf [FILE...]
        framewise output
@@ -57,6 +58,7 @@ USAGE = """Usage: framewise              open the Framewise window
   draw            draw on the screen (again: back to the apps, drawings kept; Esc clears)
   fit [VIDEO]     make a copy of a video small enough to send (10 MB, 25 MB...)
   send [FILE...]  send files, the clipboard or a screenshot to a phone on the same Wi-Fi
+  receive         get files and text from a phone on the same Wi-Fi
   scroll          a scrolling screenshot: a whole page, chat or document, scrolled for you
   pdf [FILE...]   merge, pick pages, compress or rotate PDFs; pictures to PDF and back
   output          play everything on the next sound device (speakers, headphones...)
@@ -617,7 +619,7 @@ class Framewise(Adw.Application):
             cmdline.print_literal(USAGE)
             return 0
         known = ("--background", "camera", "screenshot", "settings", "clipboard", "text", "color", "dictate",
-                 "draw", "fit", "send", "scroll", "pdf", "output", "mic", "edit", "record")
+                 "draw", "fit", "send", "receive", "scroll", "pdf", "output", "mic", "edit", "record")
         if args and args[0] not in known and not args[0].startswith("-"):
             # Files given on their own (Files' "Open With"): PDFs to PDF Tools,
             # videos to Make a Video Fit.
@@ -680,6 +682,9 @@ class Framewise(Adw.Application):
         if args[0] == "send":
             paths = [cmdline.create_file_for_arg(a).get_path() for a in args[1:]]
             self.show_send([p for p in paths if p])
+            return 0
+        if args[0] == "receive":
+            self.show_send(receive=True)
             return 0
         if args[0] == "fit":
             path = cmdline.create_file_for_arg(args[1]).get_path() if len(args) > 1 else None
@@ -840,9 +845,9 @@ class Framewise(Adw.Application):
         from .pdf_window import PdfWindow
         PdfWindow(self, paths).present()
 
-    def show_send(self, paths=None):
+    def show_send(self, paths=None, receive=False):
         from .send_window import SendWindow
-        SendWindow(self, paths).present()
+        SendWindow(self, paths, receive=receive).present()
 
     def show_fit(self, path=None):
         from .fit_window import FitWindow

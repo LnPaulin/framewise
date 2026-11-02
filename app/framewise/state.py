@@ -51,6 +51,7 @@ DEFAULT_SETTINGS = {
     "recording_dnd": True,        # Do Not Disturb while recording (dnd.py)
     "dictation_language": "",     # "" = detect each time; a code (e.g. "fr") answers faster
     "sound_skip_outputs": [],       # node names Shift+Super+O leaves out (read by the extension)
+    "receive_folder": "",           # where files from the phone go; empty: Downloads
     "sound_lower_on_unplug": True,  # speakers turned down when headphones are unplugged (read by the extension)
     "folder": str(Path.home() / "Videos" / "Recordings"),
     "last_mode": "screen",        # area | window | screen

@@ -30,7 +30,7 @@ TOOLS = [
     ("scroll", "Scrolling Screenshot", "A whole page, scrolled for you", "go-down-symbolic", "framewise-scroll"),
     ("color", "Color Picker", "Copy the color of any pixel", "color-select-symbolic", "framewise-color"),
     ("fit", "Make a Video Fit", "A copy small enough to send", "video-x-generic-symbolic", None),
-    ("send", "Send to Phone", "Through a QR code, on the same Wi-Fi", "phone-symbolic", None),
+    ("send", "Send to Phone", "Both ways, through a QR code on the same Wi-Fi", "phone-symbolic", None),
     ("pdf", "PDF Tools", "Merge, pick pages, compress, rotate", "x-office-document-symbolic", None),
 ]
 # Tools that open a window of their own: the home window stays.

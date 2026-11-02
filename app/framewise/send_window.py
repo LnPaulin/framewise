@@ -1,4 +1,5 @@
-"""The "Send to Phone" window: choose something, scan the QR code with a phone."""
+"""The "Send to Phone" window: choose something, scan the QR code with a phone.
+Or the other way: scan a code to send files and text from the phone here."""
 
 import tempfile
 import zipfile
@@ -15,10 +16,11 @@ from .state import settings  # noqa: E402
 
 
 class SendWindow(Adw.ApplicationWindow):
-    def __init__(self, app, paths=None):
+    def __init__(self, app, paths=None, receive=False):
         super().__init__(application=app, title="Send to Phone", default_width=420, resizable=False)
         self.app = app
         self.sharing = None
+        self.receiving = None
         self._temp = tempfile.TemporaryDirectory(prefix="framewise-send-")
         self._ticker = 0
 
@@ -42,6 +44,14 @@ class SendWindow(Adw.ApplicationWindow):
             row.connect("activated", lambda *_a, h=handler: h())
             group.add(row)
         choose.append(group)
+        back = Adw.PreferencesGroup(title="From Your Phone")
+        row = Adw.ActionRow(title="Get Files from Your Phone", subtitle="Photos, videos, any file, or text",
+                            activatable=True)
+        row.add_prefix(Gtk.Image(icon_name="folder-download-symbolic"))
+        row.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
+        row.connect("activated", lambda *_: self._start_receiving())
+        back.add(row)
+        choose.append(back)
         self.choose_note = Gtk.Label(wrap=True, xalign=0, max_width_chars=46, css_classes=["error"])
         choose.append(self.choose_note)
         self.stack.add_named(choose, "choose")
@@ -78,6 +88,7 @@ class SendWindow(Adw.ApplicationWindow):
         buttons.append(done)
         show.append(buttons)
         self.stack.add_named(show, "show")
+        self.stack.add_named(self._build_receive(), "receive")
 
         view = Adw.ToolbarView()
         view.add_top_bar(header)
@@ -92,6 +103,8 @@ class SendWindow(Adw.ApplicationWindow):
 
         if paths:
             self.send_paths(paths)
+        elif receive:
+            self._start_receiving()
 
     # ---- what to send ----------------------------------------------------------------
 
@@ -222,6 +235,11 @@ class SendWindow(Adw.ApplicationWindow):
             self.qr.set_opacity(0.25)
 
     def _stop(self):
+        if self.receiving is not None:
+            receiving, self.receiving = self.receiving, None
+            receiving.on_event = None
+            receiving.stop()
+            self.app.release()
         if self._ticker:
             GLib.source_remove(self._ticker)
             self._ticker = 0
@@ -234,7 +252,160 @@ class SendWindow(Adw.ApplicationWindow):
 
     def _stop_and_choose(self):
         self._stop()
+        self.set_title("Send to Phone")
         self.stack.set_visible_child_name("choose")
+
+    # ---- receiving from the phone ----------------------------------------------------
+
+    def _build_receive(self):
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                       margin_top=6, margin_bottom=18, margin_start=18, margin_end=18)
+        self.rqr = Gtk.Picture(can_shrink=False, halign=Gtk.Align.CENTER, css_classes=["card"])
+        self.rqr.set_size_request(260, 260)
+        page.append(self.rqr)
+        page.append(Gtk.Label(label="Scan with your phone to send files here", wrap=True,
+                              max_width_chars=40, css_classes=["heading"], margin_top=6))
+        self.rstatus = Gtk.Label(wrap=True, max_width_chars=44, css_classes=["dim-label"])
+        page.append(self.rstatus)
+        self.rlink = Gtk.Label(selectable=True, wrap=True, wrap_mode=2, max_width_chars=44,
+                               css_classes=["caption", "dim-label"])
+        page.append(self.rlink)
+        self.rhelp = Gtk.Expander(label="Page won't open on your phone?", halign=Gtk.Align.CENTER)
+        self.rhelp.set_child(Gtk.Label(
+            wrap=True, xalign=0, max_width_chars=44, css_classes=["caption"], margin_top=6,
+            label="• Turn off any VPN or ad-blocking app on the phone: it keeps the phone from "
+                  "reaching this computer.\n"
+                  "• Use the same Wi-Fi as this computer, not a guest network.\n"
+                  "• Type the address under the code into the phone\u2019s browser yourself."))
+        page.append(self.rhelp)
+        folder = Adw.ActionRow(title="Saved in")
+        self.rfolder = folder
+        change = Gtk.Button(label="Change…", valign=Gtk.Align.CENTER, css_classes=["flat"])
+        change.connect("clicked", lambda *_: self._choose_folder())
+        folder.add_suffix(change)
+        where = Gtk.ListBox(css_classes=["boxed-list"], selection_mode=Gtk.SelectionMode.NONE)
+        where.append(folder)
+        page.append(where)
+        self.rlist = Gtk.ListBox(css_classes=["boxed-list"], selection_mode=Gtk.SelectionMode.NONE,
+                                 visible=False)
+        scroller = Gtk.ScrolledWindow(child=self.rlist, propagate_natural_height=True,
+                                      max_content_height=240, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        page.append(scroller)
+        buttons = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER, margin_top=6)
+        self.ragain = Gtk.Button(label="New Code", visible=False)
+        self.ragain.connect("clicked", lambda *_: self._start_receiving())
+        back = Gtk.Button(label="Back")
+        back.connect("clicked", lambda *_: self._stop_and_choose())
+        done = Gtk.Button(label="Done", css_classes=["suggested-action"])
+        done.connect("clicked", lambda *_: self.close())
+        for b in (self.ragain, back, done):
+            buttons.append(b)
+        page.append(buttons)
+        return page
+
+    def _receive_folder(self):
+        chosen = settings.get("receive_folder")
+        if chosen:
+            return Path(chosen).expanduser()
+        downloads = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD)
+        return Path(downloads) if downloads else Path.home() / "Downloads"
+
+    def _show_folder(self):
+        folder = self._receive_folder()
+        home = Path.home()
+        shown = "~/" + str(folder.relative_to(home)) if folder.is_relative_to(home) else str(folder)
+        self.rfolder.set_subtitle(shown)
+
+    def _choose_folder(self):
+        dialog = Gtk.FileDialog(title="Where Files from Your Phone Go",
+                                initial_folder=Gio.File.new_for_path(str(self._receive_folder())))
+
+        def done(d, result):
+            try:
+                folder = d.select_folder_finish(result)
+            except GLib.Error:
+                return
+            if folder and folder.get_path():
+                settings.set("receive_folder", folder.get_path())
+                self._show_folder()
+                if self.receiving is not None:
+                    self.receiving.folder = Path(folder.get_path())
+        dialog.select_folder(self, None, done)
+
+    def _start_receiving(self):
+        self._stop()
+        try:
+            self.receiving = share.Receiving(self._receive_folder(), self._on_receive_event)
+        except OSError as e:
+            self.choose_note.set_text(f"Couldn't start: {e}")
+            self.stack.set_visible_child_name("choose")
+            return
+        self.choose_note.set_text("")
+        texture = share.qr_texture(self.receiving.url)
+        self.rqr.set_paintable(texture)
+        self.rqr.set_visible(texture is not None)
+        self.rqr.set_opacity(1)
+        self.rlink.set_text(self.receiving.url if texture else f"Open this on your phone: {self.receiving.url}")
+        self._show_folder()
+        self._received = 0
+        self.rhelp.set_visible(True)
+        self.rhelp.set_expanded(False)
+        self.ragain.set_visible(False)
+        self.rstatus.set_text("Scan the code with your phone's camera. Your phone must be on the same Wi-Fi.")
+        self.stack.set_visible_child_name("receive")
+        self.set_title("Get Files from Your Phone")
+        self.app.hold()
+
+    def _on_receive_event(self, kind, detail):
+        if self.receiving is None:
+            return
+        if kind == "opened":
+            self.rhelp.set_visible(False)
+            if not self._received:
+                self.rstatus.set_text("Opened on your phone. Choose files there, or send some text.")
+        elif kind == "receiving":
+            self.rstatus.set_text(f"Receiving {detail}…")
+        elif kind == "received":
+            self._received += 1
+            self.rstatus.set_text(f"Received {self._received} file{'s' if self._received != 1 else ''}.")
+            self._add_file_row(Path(detail))
+        elif kind == "failed":
+            self.rstatus.set_text(f"{detail} didn't arrive whole. Try sending it again.")
+        elif kind == "text":
+            Gdk.Display.get_default().get_clipboard().set(detail)
+            self.rstatus.set_text("Text received, and copied: paste it anywhere.")
+            self._add_text_row(detail)
+        elif kind == "stopped":
+            self.rstatus.set_text("This code has stopped working after a while without use.")
+            self.rqr.set_opacity(0.25)
+            self.ragain.set_visible(True)
+
+    def _add_file_row(self, path):
+        row = Adw.ActionRow(title=GLib.markup_escape_text(path.name), subtitle=share.human_size(path.stat().st_size)
+                            if path.exists() else "")
+        row.add_prefix(Gtk.Image(icon_name="emblem-ok-symbolic"))
+        show = Gtk.Button(icon_name="folder-open-symbolic", tooltip_text="Show in Folder",
+                          valign=Gtk.Align.CENTER, css_classes=["flat"])
+        show.connect("clicked", lambda *_: Gtk.FileLauncher.new(Gio.File.new_for_path(str(path)))
+                     .open_containing_folder(self, None, None))
+        row.add_suffix(show)
+        open_ = Gtk.Button(label="Open", valign=Gtk.Align.CENTER)
+        open_.connect("clicked", lambda *_: Gtk.FileLauncher.new(Gio.File.new_for_path(str(path)))
+                      .launch(self, None, None))
+        row.add_suffix(open_)
+        self.rlist.prepend(row)
+        self.rlist.set_visible(True)
+
+    def _add_text_row(self, text):
+        line = " ".join(text.split())
+        row = Adw.ActionRow(title=GLib.markup_escape_text(line[:80] + ("…" if len(line) > 80 else "")),
+                            subtitle="Text · copied")
+        row.add_prefix(Gtk.Image(icon_name="edit-paste-symbolic"))
+        copy = Gtk.Button(label="Copy", valign=Gtk.Align.CENTER)
+        copy.connect("clicked", lambda *_: Gdk.Display.get_default().get_clipboard().set(text))
+        row.add_suffix(copy)
+        self.rlist.prepend(row)
+        self.rlist.set_visible(True)
 
     def _on_close(self, *_):
         self._stop()
