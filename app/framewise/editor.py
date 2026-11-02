@@ -1293,8 +1293,8 @@ class Editor(CaptionsMixin, ExportMixin, StyleMixin, Adw.ApplicationWindow):
             self.denoise_strength.set_selected(1 if self.doc["denoise"]["strength"] == "strong" else 0)
         z = self.doc["zoom"]
         self.zoom_switch.set_active(z["enabled"])
-        self.keep_camera_switch.set_active(z.get("keep_camera", True))
-        self.picture.set_camera(self.camera_spots if z.get("keep_camera", True) else [])
+        self.keep_camera_switch.set_active(z.get("keep_camera", False))
+        self.picture.set_camera(self.camera_spots if z.get("keep_camera", False) else [])
         self.zoom_amount.set_value(z["amount"])
         self.zoom_amount_label.set_label(f"{z['amount']:.1f}×")
         self.lane.set_segments(z["segments"] if z["enabled"] else [], self.clicks)

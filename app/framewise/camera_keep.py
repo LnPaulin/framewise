@@ -100,7 +100,10 @@ def in_area(take_info, crop_fraction=None):
         sl, st, sr, sb = s.get("shadow") or (0.07 * fw, 0.055 * fh, 0.07 * fw, 0.12 * fh)
         ox, oy = max(0.0, x - sl / cw), max(0.0, y - st / ch)
         outer = (ox, oy, min(1.0, x + w + sr / cw) - ox, min(1.0, y + h + sb / ch) - oy)
-        out.append((s["start"], s["end"], (x, y, w, h), tuple(s.get("radii") or (0, 0, 0, 0)), outer))
+        # The bubble shows before recording starts, but its place is only
+        # confirmed by the second check: the first place counts from the start.
+        start = 0.0 if not out and s["start"] <= 1.5 * POLL_MS / 1000 else s["start"]
+        out.append((start, s["end"], (x, y, w, h), tuple(s.get("radii") or (0, 0, 0, 0)), outer))
     return out
 
 
@@ -159,7 +162,7 @@ def export_spots(take_info, crop_fraction, base, out_rect, area, work_dir):
     return spots
 
 
-SMOOTH_S = 0.3      # seconds over which a zoom's sideways step is eased in and out
+SMOOTH_S = 0.6      # seconds over which a zoom's sideways step is eased in and out
 EPS = 1e-6          # an overlap smaller than this is rounding, not the bubble
 
 

@@ -79,6 +79,17 @@ class AreaTests(unittest.TestCase):
         self.assertEqual(ck.in_area(self.INFO, (0.0, 0.0, 0.5, 0.5)), [])
         self.assertEqual(ck.in_area({}), [])
 
+    def test_first_place_counts_from_the_start(self):
+        # Confirmed at the second check (0.5 s in), but it was there all along.
+        info = {"camera": [{"start": 0.52, "end": 5, "rect": [0.75, 0.5, 0.2, 0.4]},
+                           {"start": 6.5, "end": 9, "rect": [0.1, 0.5, 0.2, 0.4]}]}
+        spots = ck.in_area(info)
+        self.assertEqual(spots[0][0], 0.0)
+        self.assertEqual(spots[1][0], 6.5)
+
+    def test_off_by_default(self):
+        self.assertFalse(em.normalize(em.new_document(5.0), 5.0)["zoom"]["keep_camera"])
+
     def test_circle_mask(self):
         m = ck.mask(100, 100, [50] * 4)
         self.assertEqual(m[50, 50], 255)

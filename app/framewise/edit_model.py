@@ -33,7 +33,7 @@ def new_document(duration):
         # Zoom on click. Segments are in recording time; focus None follows
         # the pointer, [x, y] looks at that spot (fractions of the picture).
         "zoom": {"enabled": True, "amount": 1.8, "segments": [], "generated": False,
-                 "keep_camera": True},
+                 "keep_camera": False},
         # Background-noise removal on the microphone track.
         "denoise": {"mic": False, "strength": "normal"},
         # Background and shape of the finished video (see compose.py).
@@ -167,7 +167,7 @@ def normalize(doc, duration):
     zoom["amount"] = max(motion.AMOUNT_RANGE[0], min(motion.AMOUNT_RANGE[1], float(zoom["amount"])))
     zoom["segments"] = motion.normalize_segments(zoom["segments"], duration)
     zoom["enabled"] = bool(zoom["enabled"])
-    zoom["keep_camera"] = bool(zoom.get("keep_camera", True))
+    zoom["keep_camera"] = bool(zoom.get("keep_camera", False))
     doc["zoom"] = zoom
     style = _default_style()
     given = doc.get("style") or {}

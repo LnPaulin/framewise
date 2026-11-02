@@ -284,7 +284,7 @@ def plan_picture(take_dir, doc, crop_fraction, size, duration, fps, work_dir, ta
                                  doc["zoom"]["amount"], samples, duration, fps, typing=typing)
         # The camera bubble stays where it was, unzoomed, and zooms keep clear
         # of it (camera_keep.py).
-        if doc["zoom"].get("keep_camera", True):
+        if doc["zoom"].get("keep_camera", False):
             from . import camera_keep
             views, fades = camera_keep.steer(views, camera_keep.in_area(take_info, crop_fraction),
                                              lay["source"], fps)
