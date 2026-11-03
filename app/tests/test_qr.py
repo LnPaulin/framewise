@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from framewise import qr
 
@@ -85,6 +86,22 @@ class ReadTests(unittest.TestCase):
             page[y:y + c.shape[0], x:x + c.shape[1]] = c
         self.assertEqual(qr.read_codes(self.save(page)),
                          ["WIFI:S:home;T:WPA;P:pw;;", "https://example.com/b", "hello"])
+
+    def test_reader_that_gives_no_place(self):
+        # OpenCV 4.6's WeChat reader gives the whole picture as each code's
+        # place: the order then comes from the other readers.
+        page = np.full((300, 400, 3), 255, np.uint8)
+        page[0:10, 0:10] = 0
+        def wechat(picture):
+            h, w = picture.shape[0] - 1, picture.shape[1] - 1
+            whole = np.array([[0, 0], [w, 0], [w, h], [0, h]], np.float32)
+            return [("bottom", whole), ("top", whole)]
+
+        def other(picture):
+            return [("top", np.array([[50, 20], [90, 20], [90, 60], [50, 60]], np.float32)),
+                    ("bottom", np.array([[50, 200], [90, 200], [90, 240], [50, 240]], np.float32))]
+        with mock.patch.object(qr, "_detectors", return_value=[wechat, other]):
+            self.assertEqual(qr.read_codes(self.save(page)), ["top", "bottom"])
 
     def test_no_code(self):
         page = np.full((300, 400, 3), 255, np.uint8)

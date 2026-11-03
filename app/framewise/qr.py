@@ -61,7 +61,8 @@ def read_codes(path):
     image = cv2.imread(str(path))
     if image is None:
         return []
-    found = {}                       # text -> (y, x) of its top-left corner
+    import numpy as np               # comes with OpenCV
+    found = {}                       # text -> (y, x) of its top-left corner, or None
     sizes = list(_sizes(image, cv2))
     for i, read in enumerate(_detectors(cv2)):
         # Enlarged pictures go to the first reader only; the others are slow
@@ -71,11 +72,19 @@ def read_codes(path):
                 results = read(picture)
             except cv2.error:
                 continue
+            ph, pw = picture.shape[:2]
             for text, points in results:
-                if text and text not in found:
-                    pts = points.reshape(-1, 2)
-                    found[text] = (pts[:, 1].min() / k, pts[:, 0].min() / k)
-    return [t for t, _ in sorted(found.items(), key=lambda f: (round(f[1][0] / 20), f[1][1]))]
+                if not text or found.get(text) is not None:
+                    continue
+                pts = np.asarray(points).reshape(-1, 2)
+                # OpenCV 4.6's WeChat reader gives the whole picture as every
+                # code's place: no place then, another reader may know it.
+                whole = (pts[:, 0].max() - pts[:, 0].min() >= pw - 2
+                         and pts[:, 1].max() - pts[:, 1].min() >= ph - 2)
+                found[text] = None if whole else (pts[:, 1].min() / k, pts[:, 0].min() / k)
+    far = (1e9, 1e9)                 # no place known: last
+    return [t for t, _ in sorted(found.items(),
+                                 key=lambda f: (round((f[1] or far)[0] / 20), (f[1] or far)[1]))]
 
 
 def is_link(text):
