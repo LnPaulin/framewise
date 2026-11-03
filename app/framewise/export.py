@@ -539,14 +539,18 @@ def _picture_chain(plan, fps, duration, first_input, hw=True):
             cur = "rp"
     # The zoom's crop size changes over time, which only commands can do;
     # sendcmd sits right before it so they arrive as close to their frame as possible.
-    send = f"sendcmd=f='{plan['commands']}'," if plan.get("has_commands") else ""
+    # The same pixel format on both sides of the zoom: when its scale also has
+    # to convert while the size changes, ffmpeg 6 (Ubuntu 24.04) takes seconds
+    # per frame.
+    send = "format=nv12," + (f"sendcmd=f='{plan['commands']}'," if plan.get("has_commands") else "")
     fading = bool(plan.get("zoom_fades"))
     if fading:
         # Near the camera, a zoom starts (and ends) by fading from the unzoomed
         # picture into the first zoom clear of it (camera_keep.steer).
         parts.append(f"[{cur}]{send}split[zm][zu]")
         cur, send = "zm", ""
-    parts.append(f"[{cur}]{send}crop@zoom={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=lanczos,setsar=1[vs]")
+    parts.append(f"[{cur}]{send}crop@zoom={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=lanczos,format=nv12,"
+                 f"setsar=1[vs]")
     cur = "vs"
     if fading:
         parts.append(f"[zu]crop={bw}:{bh}:{bx}:{by},scale={rw}:{rh}:flags=bilinear,setsar=1,format=yuv420p[zuf];"
@@ -881,19 +885,38 @@ def _run_step(job, cmd, total, on_progress, then):
 
         stream.read_line_async(GLib.PRIORITY_DEFAULT, None, read_line)
 
+    # Error output is read as it comes too: ffmpeg stops when the pipe is full
+    # (64 KB), and some versions print a line for every zoomed frame.
+    err_tail = bytearray()
+    state = {"waiting": 2, "ok": False}
+
+    def step_done():
+        state["waiting"] -= 1
+        if state["waiting"] == 0:
+            err = bytes(err_tail).decode(errors="replace")
+            then(state["ok"] and not job.cancelled, (err or "ffmpeg failed").strip()[-500:])
+
+    def read_err(src, result):
+        try:
+            data = src.read_bytes_finish(result).get_data()
+        except GLib.Error:
+            data = b""
+        if not data:
+            step_done()
+            return
+        err_tail.extend(data)
+        del err_tail[:-4096]
+        src.read_bytes_async(8192, GLib.PRIORITY_DEFAULT, None, read_err)
+
+    proc.get_stderr_pipe().read_bytes_async(8192, GLib.PRIORITY_DEFAULT, None, read_err)
+
     def finished(p, result):
         try:
             p.wait_finish(result)
         except GLib.Error:
             pass
-        err = ""
-        try:
-            pipe = p.get_stderr_pipe()
-            data = pipe.read_bytes(65536, None).get_data() if pipe else b""
-            err = data.decode(errors="replace")
-        except GLib.Error:
-            pass
-        then(p.get_successful() and not job.cancelled, (err or "ffmpeg failed").strip()[-500:])
+        state["ok"] = p.get_successful()
+        step_done()
 
     proc.wait_async(None, finished)
 
