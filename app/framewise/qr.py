@@ -64,24 +64,36 @@ def read_codes(path):
     import numpy as np               # comes with OpenCV
     found = {}                       # text -> (y, x) of its top-left corner, or None
     sizes = list(_sizes(image, cv2))
-    for i, read in enumerate(_detectors(cv2)):
+    readers = _detectors(cv2)
+
+    def look(read, picture, k, only=None):
+        try:
+            results = read(picture)
+        except cv2.error:
+            return
+        ph, pw = picture.shape[:2]
+        for text, points in results:
+            if not text or found.get(text) is not None or (only is not None and text not in only):
+                continue
+            pts = np.asarray(points).reshape(-1, 2)
+            # OpenCV 4.6's WeChat reader gives the whole picture as every
+            # code's place: no place then, another reader may know it.
+            whole = (pts[:, 0].max() - pts[:, 0].min() >= pw - 2
+                     and pts[:, 1].max() - pts[:, 1].min() >= ph - 2)
+            found[text] = None if whole else (pts[:, 1].min() / k, pts[:, 0].min() / k)
+
+    for i, read in enumerate(readers):
         # Enlarged pictures go to the first reader only; the others are slow
         # there and find nothing more (they're for codes seen at an angle).
         for picture, k in (sizes if i == 0 else sizes[:1]):
-            try:
-                results = read(picture)
-            except cv2.error:
-                continue
-            ph, pw = picture.shape[:2]
-            for text, points in results:
-                if not text or found.get(text) is not None:
-                    continue
-                pts = np.asarray(points).reshape(-1, 2)
-                # OpenCV 4.6's WeChat reader gives the whole picture as every
-                # code's place: no place then, another reader may know it.
-                whole = (pts[:, 0].max() - pts[:, 0].min() >= pw - 2
-                         and pts[:, 1].max() - pts[:, 1].min() >= ph - 2)
-                found[text] = None if whole else (pts[:, 1].min() / k, pts[:, 0].min() / k)
+            look(read, picture, k)
+    for read in readers[1:]:
+        # Codes found with no place: the other readers look for them enlarged.
+        for picture, k in sizes[1:]:
+            missing = {t for t, at in found.items() if at is None}
+            if not missing:
+                break
+            look(read, picture, k, only=missing)
     far = (1e9, 1e9)                 # no place known: last
     return [t for t, _ in sorted(found.items(),
                                  key=lambda f: (round((f[1] or far)[0] / 20), (f[1] or far)[1]))]

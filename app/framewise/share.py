@@ -440,7 +440,16 @@ class Receiving:
             return
         size = self._length(req)
         if size is None or size > MAX_TEXT:
-            req.send_error(413 if size else 411)
+            if size is not None and size <= 8 * MAX_TEXT:
+                # Read it first: the phone then gets the answer, not a broken connection.
+                left = size
+                while left > 0:
+                    got = req.rfile.read(min(left, CHUNK))
+                    if not got:
+                        break
+                    left -= len(got)
+            req.close_connection = True
+            req.send_error(411 if size is None else 413)
             return
         text = req.rfile.read(size).decode("utf-8", "replace")
         self._last = time.monotonic()
