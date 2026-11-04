@@ -66,6 +66,7 @@ class Effects:
         self._latest = None      # the newest frame, for the model thread
         self._mask = None        # person mask, SEG_SIZE x SEG_SIZE, smoothed over time
         self._faces = []         # [(x, y, w, h, landmarks 5x2)] in frame pixels, smoothed
+        self.faces_work = True   # False: this OpenCV can't run the face model (4.6, Ubuntu 24.04)
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._running = True
@@ -123,8 +124,16 @@ class Effects:
         extra = -small.shape[0] % 32
         if extra:
             small = cv2.copyMakeBorder(small, 0, extra, 0, 0, cv2.BORDER_CONSTANT, value=0)
+        if not self.faces_work:
+            return []
         self._faces_net.setInputSize((small.shape[1], small.shape[0]))
-        _ok, found = self._faces_net.detect(small)
+        try:
+            _ok, found = self._faces_net.detect(small)
+        except cv2.error:
+            # The face model needs OpenCV 4.8 or newer: smooth skin and face
+            # light then do nothing; background blur still works.
+            self.faces_work = False
+            return []
         faces = []
         if found is not None:
             for f in found[:3]:

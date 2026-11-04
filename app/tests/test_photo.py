@@ -161,6 +161,23 @@ class StillEffectsTests(unittest.TestCase):
         out = fx.still(frame)
         self.assertEqual(out.shape, frame.shape)
 
+    @unittest.skipUnless(camera_fx.available(), "needs OpenCV and the models")
+    def test_face_model_that_fails(self):
+        # OpenCV 4.6 (Ubuntu 24.04) can't run the face model: the face
+        # effects do nothing, the picture still comes out.
+        import numpy as np
+        fx = camera_fx.Effects()
+        self.addCleanup(fx.stop)
+        fx.smooth, fx.light = 0.5, 0.5
+        bad = mock.Mock()
+        bad.detect.side_effect = camera_fx.cv2.error("too old")
+        fx._faces_net = bad
+        frame = np.full((720, 1280, 4), 120, np.uint8)
+        self.assertEqual(fx.still(frame).shape, frame.shape)
+        self.assertFalse(fx.faces_work)
+        fx.still(frame)
+        self.assertEqual(bad.detect.call_count, 1)     # not tried again
+
 
 class SaveTests(unittest.TestCase):
     def test_jpeg(self):
