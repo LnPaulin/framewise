@@ -1,0 +1,19 @@
+Origin: Framewise
+Label: Framewise
+Suite: stable
+Codename: stable
+Date: Wed, 04 Nov 2026 02:08:19 GMT
+Architectures: all amd64 arm64 i386 armhf riscv64
+Description: Framewise updates (https://github.com/LnPaulin/framewise)
+MD5Sum:
+ bf5de44444612613393ef7cf7e281b1a     6209 Packages
+ 232d3b39631d28bb73e041705d9a8b5c     1582 Packages.gz
+SHA1:
+ 528b81a43a060d1e33d5dc730f3b057db6658d5e     6209 Packages
+ 00ceb369855f26ec136cb110b05407587b6593cd     1582 Packages.gz
+SHA256:
+ 2ab3bae341e9c5c09b7d340f80bf01b8b442b355ea9b64f0b67b6acab715eff0     6209 Packages
+ 78a2b8a5b3845fc907ad92c116d09b5c0fef80d080cde2027aa90f63c91b5f4c     1582 Packages.gz
+SHA512:
+ 2d3b251e5037282eadd47f2cf1282356bc931859ddcdf913753dc77c2036377c412b4af170bad89794e6df993aef91d3b476852ff04342072051fca80d4b0a90     6209 Packages
+ ab2bee2dcf8a7c42403649defba719d9b1592739f75bfce1237996108195a3adfb038152d682a8cf216ac57c06831a2486de71fae21a09adfa3b02f66c77704e     1582 Packages.gz
