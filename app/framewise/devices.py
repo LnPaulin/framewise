@@ -23,6 +23,7 @@ class Device:
     id: str        # microphone: PipeWire/Pulse source name; camera: /dev/videoN
     name: str
     mjpeg: bool = False   # cameras: can send compressed 1280x720 frames
+    photo: tuple = None   # cameras: (format, width, height) of the biggest picture, for photos
 
 
 def _props(dev):
@@ -100,6 +101,28 @@ def microphones():
     return found
 
 
+def photo_size(caps, aspect=16 / 9):
+    """The biggest picture a camera sends, as (format, width, height): "jpeg" or
+    "raw". Sizes in the bubble's shape (aspect) come first, so a photo shows
+    what the bubble showed; JPEG wins a tie (raw is slow at big sizes). None
+    if caps list no fixed sizes."""
+    best = None
+    for i in range(caps.get_size() if caps else 0):
+        st = caps.get_structure(i)
+        name = st.get_name()
+        if name not in ("image/jpeg", "video/x-raw"):
+            continue
+        ok_w, w = st.get_int("width")
+        ok_h, h = st.get_int("height")
+        if not (ok_w and ok_h) or w <= 0 or h <= 0:
+            continue
+        fmt = "jpeg" if name == "image/jpeg" else "raw"
+        key = (abs(w / h - aspect) < 0.02, w * h, fmt == "jpeg")
+        if best is None or key > best[0]:
+            best = (key, (fmt, w, h))
+    return best[1] if best else None
+
+
 def cameras():
     """Colour cameras only: infrared (greyscale-only) face-unlock cameras are left out."""
     found = {}
@@ -111,7 +134,7 @@ def cameras():
         if not path or ("GRAY8" in text and "image/jpeg" not in text and "YUY2" not in text
                         and "NV12" not in text):
             continue
-        cam = Device(path, _clean(dev.get_display_name()), "image/jpeg" in text)
+        cam = Device(path, _clean(dev.get_display_name()), "image/jpeg" in text, photo_size(caps))
         if path not in found or len(cam.name) < len(found[path].name):
             found[path] = cam
     return sorted(found.values(), key=lambda d: d.id)

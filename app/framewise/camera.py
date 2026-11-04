@@ -56,11 +56,33 @@ OLD_LOOKS = {"bright": "teams", "soft": "touchup"}
 
 # With effects on, frames are processed at this size (the bubble is smaller,
 # and it keeps the effects quick).
-FX_WIDTH, FX_HEIGHT = 960, 540
+FX_WIDTH, FX_HEIGHT = 1280, 720
+
+# Photos: the camera opens at its biggest size for one picture. Right after
+# opening it is still setting its exposure, so the first frames are skipped.
+PHOTO_SETTLE_S = 0.8
+PHOTO_TIMEOUT_S = 8
 
 # Lock focus: autofocus runs this long after the camera opens (to find your
 # face), then the camera holds that focus.
 FOCUS_SETTLE_MS = 2500
+
+
+def _frame_array(sample):
+    """A BGRA sample as an HxWx4 numpy array (a copy), or None."""
+    import numpy as np
+    caps = sample.get_caps().get_structure(0)
+    width, height = caps.get_value("width"), caps.get_value("height")
+    buf = sample.get_buffer()
+    ok, info = buf.map(Gst.MapFlags.READ)
+    if not ok:
+        return None
+    try:
+        raw = np.frombuffer(info.data, np.uint8)
+        stride = raw.size // height
+        return raw.reshape(height, stride)[:, :width * 4].reshape(height, width, 4).copy()
+    finally:
+        buf.unmap(info)
 
 
 class FrameStream(GObject.Object, Gdk.Paintable):
@@ -112,6 +134,9 @@ class Camera:
         cam = find_camera(device_id, name)
         self.device = cam.id if cam else "/dev/video0"
         self.mjpeg = cam.mjpeg if cam else True
+        self.photo = cam.photo if cam else None    # (format, width, height) for photos
+        self._still = None            # the one-picture pipeline while a photo is taken
+        self._photo_job = None
         self.pipeline = None
         self.paintable = None
         self.on_error = None
@@ -141,15 +166,27 @@ class Camera:
     # turn on the real webcam. It must end with "! ".
     test_source = None
 
-    def start(self):
+    def _source(self, jpeg, width, height, fps=None):
         if self.test_source:
-            source = self.test_source
-        elif self.mjpeg:
+            return self.test_source
+        rate = f",framerate={fps}/1" if fps else ""
+        if jpeg:
             # Most webcams send 720p only as JPEG; decode it on the GPU when we can.
-            decoder = gpu.jpeg_decoder()
-            source = (f"v4l2src device={self.device} ! "
-                      f"image/jpeg,width={self.WIDTH},height={self.HEIGHT},framerate={self.FPS}/1 ! "
-                      f"{decoder} ! ")
+            return (f"v4l2src device={self.device} ! image/jpeg,width={width},height={height}{rate} ! "
+                    f"{gpu.jpeg_decoder()} ! ")
+        return (f"v4l2src device={self.device} ! video/x-raw,width={width},height={height}{rate} ! "
+                f"videoconvert ! ")
+
+    def _filters(self):
+        if gpu.gst_va():
+            return "vapostproc name=fx disable-passthrough=true ! "
+        # Software: brightness, contrast and colour, and the mirror.
+        return ("videoconvert ! videoflip name=flip ! videoscale ! videoconvert ! "
+                "videobalance name=fx ! videoconvert ! ")
+
+    def start(self):
+        if self.test_source or self.mjpeg:
+            source = self._source(True, self.WIDTH, self.HEIGHT, self.FPS)
         else:
             source = (f"v4l2src device={self.device} ! videoconvert ! videoscale ! "
                       f"video/x-raw,width={self.WIDTH},height={self.HEIGHT} ! ")
@@ -162,12 +199,7 @@ class Camera:
         else:
             width, height = self.WIDTH, self.HEIGHT
             view = "gtk4paintablesink name=view sync=false "
-        if gpu.gst_va():
-            filters = "vapostproc name=fx disable-passthrough=true ! "
-        else:
-            # Software: brightness, contrast and colour, and the mirror.
-            filters = ("videoconvert ! videoflip name=flip ! videoscale ! videoconvert ! "
-                       "videobalance name=fx ! videoconvert ! ")
+        filters = self._filters()
         desc = (
             source + filters +
             # Pin the full size here: otherwise the light meter's tiny
@@ -208,6 +240,7 @@ class Camera:
                 self._set_autofocus(False)  # restarted for effects: keep the held focus
 
     def stop(self, keep_effects=False):
+        self._end_photo()
         if self._meter_timer:
             GLib.source_remove(self._meter_timer)
             self._meter_timer = None
@@ -221,6 +254,112 @@ class Camera:
         if self._effects is not None and not keep_effects:
             self._effects.stop()
             self._effects = None
+
+    # ---- photos ----------------------------------------------------------------
+
+    def can_take_big_photo(self):
+        """The camera sends bigger pictures than the bubble shows."""
+        return (self.pipeline is not None and self._still is None and self.photo is not None
+                and self.photo[1] * self.photo[2] > self.WIDTH * self.HEIGHT)
+
+    def take_photo(self, frozen, on_done):
+        """A photo at the camera's biggest size, with the same look (filter,
+        mirror, effects). The bubble shows frozen (a texture) meanwhile: the
+        camera reopens at that size for one picture, about a second.
+        on_done(texture or None) runs on the main loop; the live picture is
+        back by then. None: no photo (use the bubble's picture instead)."""
+        if not self.can_take_big_photo():
+            GLib.idle_add(lambda: on_done(None) and False)
+            return
+        fmt, width, height = self.photo
+        effects = self._effects if self._effects_on else None
+        self.stop(keep_effects=True)
+        self.paintable = FrameStream()
+        if frozen is not None:
+            self.paintable.set_texture(frozen)
+        if self.on_paintable:
+            self.on_paintable(self.paintable)
+        job = {"on_done": on_done, "first": None, "taken": False, "effects": effects}
+        self._photo_job = job
+        desc = (self._source(fmt == "jpeg", width, height) + self._filters() +
+                f"video/x-raw,format=BGRA,width={width},height={height} ! "
+                "appsink name=still emit-signals=true max-buffers=1 drop=true sync=false")
+        try:
+            self._still = Gst.parse_launch(desc)
+        except GLib.Error:
+            self._finish_photo(job, None)
+            return
+        self._fx = self._still.get_by_name("fx")
+        self._flip = self._still.get_by_name("flip")
+        self._apply()
+        bus = self._still.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message::error", lambda *_: self._finish_photo(job, None))
+        self._still.get_by_name("still").connect("new-sample", self._on_still_sample, job)
+        def too_long():
+            job["timer"] = None       # this timer is over: nothing to remove
+            return self._finish_photo(job, None)
+        job["timer"] = GLib.timeout_add_seconds(PHOTO_TIMEOUT_S, too_long)
+        self._still.set_state(Gst.State.PLAYING)
+
+    def _on_still_sample(self, sink, job):
+        """On GStreamer's thread: skips frames while the camera settles, then
+        keeps one and works on it in a thread of its own."""
+        import time
+        sample = sink.emit("pull-sample")
+        if sample is None or job["taken"]:
+            return Gst.FlowReturn.OK
+        now = time.monotonic()
+        if job["first"] is None:
+            job["first"] = now
+        if now - job["first"] < PHOTO_SETTLE_S and not self.test_source:
+            return Gst.FlowReturn.OK
+        job["taken"] = True
+        frame = _frame_array(sample)
+        if frame is None:
+            GLib.idle_add(lambda: self._finish_photo(job, None) and False)
+            return Gst.FlowReturn.OK
+
+        def work():
+            out = frame
+            if job["effects"] is not None:
+                try:
+                    out = job["effects"].still(frame)
+                except Exception:   # effects are a nicety: the photo still counts
+                    out = frame
+            h, w = out.shape[:2]
+            texture = Gdk.MemoryTexture.new(w, h, Gdk.MemoryFormat.B8G8R8A8_PREMULTIPLIED,
+                                            GLib.Bytes.new(out.tobytes()), w * 4)
+            GLib.idle_add(lambda: self._finish_photo(job, texture) and False)
+        threading.Thread(target=work, daemon=True).start()
+        return Gst.FlowReturn.OK
+
+    def _end_photo(self):
+        """Closes the one-picture pipeline, if any. Returns its job."""
+        job, self._photo_job = self._photo_job, None
+        if job is not None and job.get("timer"):
+            GLib.source_remove(job["timer"])
+            job["timer"] = None
+        if self._still is not None:
+            self._still.get_bus().remove_signal_watch()
+            self._still.set_state(Gst.State.NULL)
+            self._still = None
+        return job
+
+    def _finish_photo(self, job, texture):
+        """Back to the live picture, then the photo goes to on_done."""
+        if job is not self._photo_job:
+            return False            # already finished, or the camera was closed
+        self._end_photo()
+        try:
+            self.start()
+        except GLib.Error as e:
+            if self.on_error:
+                self.on_error(e.message)
+        if self.on_paintable and self.paintable is not None:
+            self.on_paintable(self.paintable)
+        job["on_done"](texture)
+        return False
 
     # ---- effects ---------------------------------------------------------------
 
@@ -248,22 +387,13 @@ class Camera:
 
     def _on_fx_sample(self, sink):
         """A frame for the effects (on GStreamer's thread)."""
-        import numpy as np
         sample = sink.emit("pull-sample")
         if sample is None or self._effects is None:
             return Gst.FlowReturn.OK
-        caps = sample.get_caps().get_structure(0)
-        width, height = caps.get_value("width"), caps.get_value("height")
-        buf = sample.get_buffer()
-        ok, info = buf.map(Gst.MapFlags.READ)
-        if not ok:
+        frame = _frame_array(sample)
+        if frame is None:
             return Gst.FlowReturn.OK
-        try:
-            raw = np.frombuffer(info.data, np.uint8)
-            stride = raw.size // height
-            frame = raw.reshape(height, stride)[:, :width * 4].reshape(height, width, 4).copy()
-        finally:
-            buf.unmap(info)
+        height, width = frame.shape[:2]
         out = self._effects.process(frame)
         data = GLib.Bytes.new(out.tobytes())
         with self._pending_lock:

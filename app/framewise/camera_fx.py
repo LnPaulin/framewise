@@ -31,6 +31,7 @@ FACE_MODEL = MODELS / "face_detection_yunet_2023mar.onnx"
 SEG_SIZE = 256               # the segmentation model's input (square)
 FACE_WIDTH = 320             # frames are shrunk to this width to find faces
 MAX_MODEL_RATE = 15          # model runs per second, at most
+REF_WIDTH = 960              # blur and smoothing strengths are tuned at this width
 
 
 def available():
@@ -92,9 +93,7 @@ class Effects:
             started = time.monotonic()
             bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
             if self.blur > 0.01 or self.light > 0.01:
-                blob = cv2.dnn.blobFromImage(bgr, 1 / 255.0, (SEG_SIZE, SEG_SIZE), swapRB=True)
-                self._seg.setInput(blob)
-                mask = self._seg.forward()[0, 0].astype(np.float32)
+                mask = self._person(bgr)
                 with self._lock:
                     # Blend with the last mask: steadier edges, still quick to follow.
                     self._mask = mask if self._mask is None else self._mask * 0.35 + mask * 0.65
@@ -106,7 +105,13 @@ class Effects:
             if rest > 0:
                 time.sleep(rest)
 
-    def _find_faces(self, bgr):
+    def _person(self, bgr):
+        """Where the person is: SEG_SIZE x SEG_SIZE, 0..1."""
+        blob = cv2.dnn.blobFromImage(bgr, 1 / 255.0, (SEG_SIZE, SEG_SIZE), swapRB=True)
+        self._seg.setInput(blob)
+        return self._seg.forward()[0, 0].astype(np.float32)
+
+    def _detect_faces(self, bgr):
         h, w = bgr.shape[:2]
         k = w / FACE_WIDTH
         small = cv2.resize(bgr, (FACE_WIDTH, max(1, int(h / k))), interpolation=cv2.INTER_AREA)
@@ -118,6 +123,10 @@ class Effects:
                 box = f[:4] * k
                 marks = f[4:14].reshape(5, 2) * k
                 faces.append((box, marks))
+        return faces
+
+    def _find_faces(self, bgr):
+        faces = self._detect_faces(bgr)
         with self._lock:
             old = self._faces
             smoothed = []
@@ -141,6 +150,19 @@ class Effects:
         with self._lock:
             mask = None if self._mask is None else self._mask.copy()
             faces = list(self._faces)
+        return self._compose(frame, mask, faces)
+
+    def still(self, frame):
+        """One picture (a photo, any size): the models look at this very
+        picture, so the effects fit it exactly. Returns a new BGRA array."""
+        if not self.active:
+            return frame
+        bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        mask = self._person(bgr) if (self.blur > 0.01 or self.light > 0.01) else None
+        faces = self._detect_faces(bgr) if (self.smooth > 0.01 or self.light > 0.01) else []
+        return self._compose(frame, mask, faces)
+
+    def _compose(self, frame, mask, faces):
         out = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
         if self.blur > 0.01 and mask is not None:
             out = self._blur_background(out, mask)
@@ -160,7 +182,7 @@ class Effects:
         person = np.clip((person - 0.3) / 0.45, 0.0, 1.0)
         # Blur only the background's own colours ("normalized" blur), so the
         # person doesn't bleed a halo into it.
-        sigma = 1.5 + 6.0 * self.blur
+        sigma = (1.5 + 6.0 * self.blur) * max(1.0, w / REF_WIDTH)
         room = 1.0 - person
         num = cv2.GaussianBlur(small * room[..., None], (0, 0), sigma)
         den = cv2.GaussianBlur(room, (0, 0), sigma)[..., None] + 1e-3
@@ -187,8 +209,10 @@ class Effects:
         ch, cw = crop.shape[:2]
         s = self.smooth
         # Edge-preserving smoothing on a half-size copy (fast): evens out skin,
-        # keeps outlines.
-        half = cv2.resize(crop, (max(8, cw // 2), max(8, ch // 2)), interpolation=cv2.INTER_AREA)
+        # keeps outlines. Bigger pictures are shrunk more, so it smooths as much.
+        shrink = 2 * max(1.0, bgr.shape[1] / REF_WIDTH)
+        half = cv2.resize(crop, (max(8, int(cw / shrink)), max(8, int(ch / shrink))),
+                          interpolation=cv2.INTER_AREA)
         half = cv2.bilateralFilter(half, 7, 20 + 45 * s, 5)
         smooth = cv2.resize(half, (cw, ch), interpolation=cv2.INTER_LINEAR)
         # Where: skin-coloured parts of the face oval...

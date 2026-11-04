@@ -94,6 +94,7 @@ class CameraBubble(Gtk.Window):
         self.add_css_class("ck-bubble")
         self.on_closed = on_closed
         self.camera = Camera(settings.get("camera_device"), settings.get("camera_name"))
+        self._photo_busy = False
         self.camera.on_error = self._on_camera_error
 
         provider = Gtk.CssProvider()
@@ -455,6 +456,7 @@ class CameraBubble(Gtk.Window):
         photo = Gtk.Button(icon_name="camera-photo-symbolic", tooltip_text="Take Photo",
                            css_classes=["flat", "circular"])
         photo.connect("clicked", self._take_photo)
+        self.photo_button = photo
         close = Gtk.Button(icon_name="window-close-symbolic", tooltip_text="Close Camera",
                            css_classes=["flat", "circular"])
         close.connect("clicked", lambda *_: self.close())
@@ -606,20 +608,37 @@ class CameraBubble(Gtk.Window):
 
     def _take_photo(self, *_):
         """Saved straight to Pictures; a flash and the shutter sound say it was
-        taken (no sound while recording: it would be in the video)."""
-        from .shots import shot_destination
+        taken (no sound while recording: it would be in the video). Not while
+        recording, the camera opens at its biggest size for this one picture;
+        while recording that would show in the video, so the bubble's own
+        picture is kept."""
         frame = self._current_frame()
-        if frame is None:
+        if frame is None or self._photo_busy:
             return
-        pictures = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
-        path = shot_destination(pictures or str(Path.home() / "Pictures"), prefix="Photo")
-        self._flash()
         session = getattr(self.get_application(), "session", None)
-        if session is None or session.phase == session.IDLE:
+        idle = session is None or session.phase == session.IDLE
+        self._flash()
+        if idle:
             from . import sounds
             sounds.play("camera-shutter")
+        if idle and self.camera.can_take_big_photo():
+            self._photo_busy = True
+            self.photo_button.set_sensitive(False)
+
+            def done(big):
+                self._photo_busy = False
+                self.photo_button.set_sensitive(True)
+                self._save_photo(big or frame)
+            self.camera.take_photo(frame, done)
+        else:
+            self._save_photo(frame)
+
+    def _save_photo(self, texture):
+        from .shots import shot_destination
+        pictures = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
+        path = shot_destination(pictures or str(Path.home() / "Pictures"), suffix=".jpg", prefix="Photo")
         try:
-            frame.save_to_png(str(path))
+            save_jpeg(texture, path)
         except GLib.Error as e:
             self.get_application().notify("The photo could not be saved", e.message)
 
@@ -641,6 +660,18 @@ class CameraBubble(Gtk.Window):
             else:
                 widget.add_css_class("ck-hidden")
             widget.set_can_target(shown)
+
+
+def save_jpeg(texture, path, quality=93):
+    """A camera photo as JPEG: a 4K PNG of camera noise is 20 MB, this about 2."""
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+    w, h = texture.get_width(), texture.get_height()
+    down = Gdk.TextureDownloader.new(texture)
+    down.set_format(Gdk.MemoryFormat.R8G8B8)
+    data, stride = down.download_bytes()
+    pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(data, GdkPixbuf.Colorspace.RGB, False, 8, w, h, stride)
+    pixbuf.savev(str(path), "jpeg", ["quality"], [str(quality)])
 
 
 def _inset(r, d):
