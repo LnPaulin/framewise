@@ -91,14 +91,17 @@ class Effects:
             if frame is None or not self.active:
                 continue
             started = time.monotonic()
-            bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-            if self.blur > 0.01 or self.light > 0.01:
-                mask = self._person(bgr)
-                with self._lock:
-                    # Blend with the last mask: steadier edges, still quick to follow.
-                    self._mask = mask if self._mask is None else self._mask * 0.35 + mask * 0.65
-            if (self.smooth > 0.01 or self.light > 0.01) and tick % 2 == 0:
-                self._find_faces(bgr)
+            try:
+                bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                if self.blur > 0.01 or self.light > 0.01:
+                    mask = self._person(bgr)
+                    with self._lock:
+                        # Blend with the last mask: steadier edges, still quick to follow.
+                        self._mask = mask if self._mask is None else self._mask * 0.35 + mask * 0.65
+                if (self.smooth > 0.01 or self.light > 0.01) and tick % 2 == 0:
+                    self._find_faces(bgr)
+            except cv2.error:
+                pass        # one bad run: the effects keep the last results, the thread goes on
             tick += 1
             # Leave the CPU some room: at most MAX_MODEL_RATE runs a second.
             rest = 1.0 / MAX_MODEL_RATE - (time.monotonic() - started)
@@ -115,6 +118,11 @@ class Effects:
         h, w = bgr.shape[:2]
         k = w / FACE_WIDTH
         small = cv2.resize(bgr, (FACE_WIDTH, max(1, int(h / k))), interpolation=cv2.INTER_AREA)
+        # Padded below to a multiple of 32: OpenCV 4.6 (Ubuntu 24.04) fails on
+        # other heights. Faces keep their place (the padding is under the picture).
+        extra = -small.shape[0] % 32
+        if extra:
+            small = cv2.copyMakeBorder(small, 0, extra, 0, 0, cv2.BORDER_CONSTANT, value=0)
         self._faces_net.setInputSize((small.shape[1], small.shape[0]))
         _ok, found = self._faces_net.detect(small)
         faces = []
