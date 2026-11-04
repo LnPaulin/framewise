@@ -35,3 +35,11 @@ jobs:
       - name: Run tests
         working-directory: app
         run: python3 -m unittest $(ls tests/test_*.py | sed 's#/#.#; s#\.py$##') -v
+
+      # The real package installs here (every package it needs exists in this
+      # Ubuntu); apt only works it out, nothing is installed.
+      - name: Package installs
+        run: |
+          scripts/build-deb.sh
+          sudo apt-get install -s -q ./dist/framewise_*_all.deb > apt.txt || { cat apt.txt; exit 1; }
+          grep -E "^Inst framewise " apt.txt

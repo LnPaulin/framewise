@@ -13,7 +13,7 @@ gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
 from . import edit_model as em  # noqa: E402
-from . import gpu  # noqa: E402
+from . import gpu, video_sink  # noqa: E402
 
 Gst.init(None)
 
@@ -53,7 +53,7 @@ class Player:
         desc = (f'filesrc location="{take}" ! matroskademux name=demux '
                 f"demux.video_0 ! queue max-size-time=1000000000 ! h264parse ! {gpu.h264_decoder()} ! "
                 f"{gpu.convert()} ! video/x-raw,format=BGRA,width={pw},height={ph},pixel-aspect-ratio=1/1 ! {crop}"
-                f"gtk4paintablesink name=view ")
+                + video_sink.sink_desc("view"))
         if self.track_names:
             desc += "audiomixer name=mix ! audioconvert ! audioresample ! autoaudiosink "
             for i, track in enumerate(self.track_names):
@@ -64,7 +64,7 @@ class Player:
                 desc += (f'filesrc location="{mic_clean}" ! decodebin3 ! audioconvert ! '
                          f"audioresample ! volume name=vol_mic_clean mute=true ! mix. ")
         self.pipeline = Gst.parse_launch(desc)
-        self.paintable = self.pipeline.get_by_name("view").get_property("paintable")
+        self.paintable = video_sink.paintable(self.pipeline, "view")
         for track in self.track_names:
             self.volumes[track] = self.pipeline.get_by_name(f"vol_{track}")
         self.clean_volume = self.pipeline.get_by_name("vol_mic_clean")

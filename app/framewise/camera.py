@@ -16,9 +16,10 @@ import gi
 gi.require_version("Gst", "1.0")
 gi.require_version("GstVideo", "1.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gdk, GLib, GObject, Gst, GstVideo  # noqa: E402
+from gi.repository import Gdk, GLib, Gst, GstVideo  # noqa: E402
 
-from . import gpu, webcam_controls  # noqa: E402
+from . import gpu, video_sink, webcam_controls  # noqa: E402
+from .video_sink import FrameStream, frame_array as _frame_array  # noqa: E402,F401
 
 Gst.init(None)
 
@@ -66,60 +67,6 @@ PHOTO_TIMEOUT_S = 8
 # Lock focus: autofocus runs this long after the camera opens (to find your
 # face), then the camera holds that focus.
 FOCUS_SETTLE_MS = 2500
-
-
-def _frame_array(sample):
-    """A BGRA sample as an HxWx4 numpy array (a copy), or None."""
-    import numpy as np
-    caps = sample.get_caps().get_structure(0)
-    width, height = caps.get_value("width"), caps.get_value("height")
-    buf = sample.get_buffer()
-    ok, info = buf.map(Gst.MapFlags.READ)
-    if not ok:
-        return None
-    try:
-        raw = np.frombuffer(info.data, np.uint8)
-        stride = raw.size // height
-        return raw.reshape(height, stride)[:, :width * 4].reshape(height, width, 4).copy()
-    finally:
-        buf.unmap(info)
-
-
-class FrameStream(GObject.Object, Gdk.Paintable):
-    """Shows the frames the effects produce (a paintable, like gtk4paintablesink's)."""
-
-    def __init__(self):
-        super().__init__()
-        self._texture = None
-
-    def set_texture(self, texture):
-        resized = (self._texture is None or self._texture.get_width() != texture.get_width()
-                   or self._texture.get_height() != texture.get_height())
-        self._texture = texture
-        if resized:
-            self.invalidate_size()
-        self.invalidate_contents()
-
-    def do_snapshot(self, snapshot, width, height):
-        if self._texture is not None:
-            self._texture.snapshot(snapshot, width, height)
-
-    def do_get_intrinsic_width(self):
-        return self._texture.get_width() if self._texture else 0
-
-    def do_get_intrinsic_height(self):
-        return self._texture.get_height() if self._texture else 0
-
-    def do_get_intrinsic_aspect_ratio(self):
-        if not self._texture:
-            return 0.0
-        return self._texture.get_width() / max(1, self._texture.get_height())
-
-    def do_get_current_image(self):
-        return self._texture or Gdk.Paintable.new_empty(0, 0)
-
-    def do_get_flags(self):
-        return 0
 
 
 class Camera:
@@ -198,7 +145,7 @@ class Camera:
                     f"caps=video/x-raw,format=BGRA,width={width},height={height} ")
         else:
             width, height = self.WIDTH, self.HEIGHT
-            view = "gtk4paintablesink name=view sync=false "
+            view = video_sink.sink_desc("view", sync=False)
         filters = self._filters()
         desc = (
             source + filters +
@@ -222,7 +169,7 @@ class Camera:
             self.paintable = FrameStream()
             self.pipeline.get_by_name("fxsink").connect("new-sample", self._on_fx_sample)
         else:
-            self.paintable = self.pipeline.get_by_name("view").get_property("paintable")
+            self.paintable = video_sink.paintable(self.pipeline, "view")
         bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message::error", self._on_error)
