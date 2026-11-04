@@ -421,15 +421,54 @@ def _paint_background(cr, W, H, bg):
     cr.fill()
 
 
+SHADOW_OPACITY = 0.42
+
+
 def _paint_shadow(cr, x, y, w, h, radius, short):
-    # Layers of faint rounded boxes stand in for a blurred shadow.
-    spread = max(6, short * 0.025)
-    steps = 10
-    for i in range(steps, 0, -1):
-        grow = spread * i / steps
-        _rounded(cr, x - grow, y - grow + spread * 0.35, w + 2 * grow, h + 2 * grow, radius + grow)
-        cr.set_source_rgba(0, 0, 0, 0.035)
-        cr.fill()
+    """A soft shadow under the picture that fades to nothing (no edge line):
+    the picture's shape, blurred, a little lower than the picture."""
+    import numpy as np
+    sigma = max(6.0, short * 0.035)
+    drop = sigma * 0.6
+    # Worked out small (the blur hides the detail), then drawn enlarged.
+    k = max(1.0, sigma / 4.0)
+    pad = 3.2 * sigma
+    sw, sh = int(math.ceil((w + 2 * pad) / k)), int(math.ceil((h + 2 * pad) / k))
+    stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_A8, sw)
+    small = cairo.ImageSurface(cairo.FORMAT_A8, sw, sh)
+    c = cairo.Context(small)
+    c.scale(1 / k, 1 / k)
+    _rounded(c, pad, pad, w, h, radius)
+    c.set_source_rgba(0, 0, 0, 1)
+    c.fill()
+    small.flush()
+    a = np.frombuffer(small.get_data(), np.uint8).reshape(sh, stride)[:, :sw].astype(np.float32)
+    r = max(1, int(round(sigma / k * 0.85)))     # three box blurs ~ one Gaussian of sigma
+    for _ in range(3):
+        a = _box_blur(_box_blur(a, r, 0), r, 1)
+    data = bytearray(stride * sh)
+    np.frombuffer(data, np.uint8).reshape(sh, stride)[:, :sw] = np.clip(a * SHADOW_OPACITY, 0, 255).astype(np.uint8)
+    mask = cairo.ImageSurface.create_for_data(data, cairo.FORMAT_A8, sw, sh, stride)
+    cr.save()
+    cr.translate(x - pad, y - pad + drop)
+    cr.scale(k, k)
+    pattern = cairo.SurfacePattern(mask)
+    pattern.set_filter(cairo.FILTER_GOOD)
+    cr.set_source_rgba(0, 0, 0, 1)
+    cr.mask(pattern)
+    cr.restore()
+
+
+def _box_blur(a, r, axis):
+    """Mean over 2r+1 pixels along axis, same size (edges count as empty)."""
+    import numpy as np
+    pad = [(0, 0), (0, 0)]
+    pad[axis] = (r + 1, r)
+    c = np.cumsum(np.pad(a, pad), axis=axis, dtype=np.float32)
+    n = a.shape[axis]
+    hi = np.take(c, np.arange(2 * r + 1, 2 * r + 1 + n), axis=axis)
+    lo = np.take(c, np.arange(0, n), axis=axis)
+    return (hi - lo) / (2 * r + 1)
 
 
 def _rounded(cr, x, y, w, h, r):
