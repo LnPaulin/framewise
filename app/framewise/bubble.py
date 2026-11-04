@@ -42,7 +42,8 @@ OPPOSITE = {"top-left": "bottom-right", "top-right": "bottom-left",
 RESIZE_EDGE = {"top-left": Gdk.SurfaceEdge.NORTH_WEST, "top-right": Gdk.SurfaceEdge.NORTH_EAST,
                "bottom-left": Gdk.SurfaceEdge.SOUTH_WEST, "bottom-right": Gdk.SurfaceEdge.SOUTH_EAST}
 GRIP = 26        # the resize handle's size
-FRAME_MARGIN = 14  # room for the shadow around the picture (see CSS)
+FRAME_MARGIN = 14  # room for the shadow around the picture (see CSS): the window
+                   # ends here, so a shadow reaching further is cut off in a hard line
 
 
 # Camera preview style: black surface, 14 px corners, a
@@ -51,7 +52,7 @@ FRAME_MARGIN = 14  # room for the shadow around the picture (see CSS)
 CSS = """
 window.ck-bubble, window.ck-bubble > * { background: transparent; box-shadow: none; }
 .ck-cam-frame { background: #000; border: 1px solid rgba(255,255,255,0.14);
-                box-shadow: 0 8px 24px rgba(0,0,0,0.38); margin: 14px; }
+                box-shadow: 0 4px 10px rgba(0,0,0,0.42); margin: 14px; }
 .ck-cam-frame.circle { border-radius: 9999px; }
 .ck-cam-frame.square { border-radius: 0; }
 .ck-cam-frame.corner { border-radius: 0; }
